@@ -1,0 +1,5 @@
+# Local development services for todu-pi-extensions
+# Uses an isolated project-local todu config and data directory.
+
+typecheck: npm run typecheck:watch
+daemon: mkdir -p ./.dev/todu/data && todu --config ./config/dev.todu.yaml daemon run
