@@ -6,6 +6,8 @@ Task manager extensions for the pi agent harness that create UI for handling tas
 
 This repository is currently initialized with project scaffolding only. It does not yet implement the task UI extension behavior.
 
+The initial architecture design is documented in [`docs/architecture.md`](docs/architecture.md).
+
 ## Goals
 
 - build pi extensions focused on task-management workflows
@@ -79,7 +81,7 @@ The dev environment still needs project-specific configuration. See todu task `t
 
 ```text
 src/                  Extension entrypoint and future task UI code
-docs/                 Project workflow and coding standards
+docs/                 Project workflow, coding standards, and architecture design
 scripts/pre-pr.sh     Local verification script
 ```
 
