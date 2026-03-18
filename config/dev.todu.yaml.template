@@ -1,0 +1,8 @@
+# Project-local development config for the isolated todu daemon and CLI.
+# Copy this to dev.todu.yaml if you want to edit it manually:
+#   cp config/dev.todu.yaml.template config/dev.todu.yaml
+#
+# The default data directory is project-local so local development does not
+# touch your normal ~/.config/todu state.
+
+data_dir: ../.dev/todu/data

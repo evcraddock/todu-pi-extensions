@@ -28,6 +28,7 @@ npm-debug.log*
 # Dev environment
 .overmind.sock
 .dev/
+config/dev.todu.yaml
 
 # AI agent config
 .claude/
