@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Test
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Dev environment
+.overmind.sock
+.dev/
+
+# AI agent config
+.claude/

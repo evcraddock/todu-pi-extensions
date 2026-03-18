@@ -1,0 +1,23 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+# Add stack-specific hooks below based on your stack:
+#
+# TypeScript:
+#   - repo: local
+#     hooks:
+#       - id: eslint
+#         name: eslint
+#         entry: npm run lint
+#         language: system
+#         types: [typescript]
