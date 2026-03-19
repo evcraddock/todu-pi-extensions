@@ -93,9 +93,8 @@ const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDepe
   ],
   parameters: TaskCreateParams,
   async execute(_toolCallId: string, params: TaskCreateToolParams) {
-    const input = normalizeCreateTaskInput(params);
-
     try {
+      const input = normalizeCreateTaskInput(params);
       const taskService = await getTaskService();
       const task = await createTask({ taskService }, input);
       const details: TaskCreateToolDetails = {
@@ -125,9 +124,8 @@ const createTaskUpdateToolDefinition = ({ getTaskService }: TaskMutationToolDepe
   ],
   parameters: TaskUpdateParams,
   async execute(_toolCallId: string, params: TaskUpdateToolParams) {
-    const input = normalizeUpdateTaskInput(params);
-
     try {
+      const input = normalizeUpdateTaskInput(params);
       const taskService = await getTaskService();
       const task = await updateTask({ taskService }, input);
       const details: TaskUpdateToolDetails = {
@@ -159,9 +157,8 @@ const createTaskCommentCreateToolDefinition = ({
   ],
   parameters: TaskCommentCreateParams,
   async execute(_toolCallId: string, params: TaskCommentCreateToolParams) {
-    const input = normalizeTaskCommentInput(params);
-
     try {
+      const input = normalizeTaskCommentInput(params);
       const taskService = await getTaskService();
       const comment = await commentOnTask({ taskService }, input);
       const details: TaskCommentCreateToolDetails = {

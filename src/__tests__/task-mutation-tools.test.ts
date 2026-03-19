@@ -152,6 +152,19 @@ describe("createTaskCreateToolDefinition", () => {
     });
   });
 
+  it("surfaces validation failures with tool-specific context", async () => {
+    const tool = createTaskCreateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", {
+        title: "   ",
+        projectId: "proj-1",
+      })
+    ).rejects.toThrow("task_create failed: title is required");
+  });
+
   it("surfaces service failures with tool-specific context", async () => {
     const tool = createTaskCreateToolDefinition({
       getTaskService: vi.fn().mockResolvedValue({
@@ -207,13 +220,13 @@ describe("createTaskUpdateToolDefinition", () => {
     });
   });
 
-  it("fails fast when no supported fields are provided", async () => {
+  it("fails fast with contextual output when no supported fields are provided", async () => {
     const tool = createTaskUpdateToolDefinition({
       getTaskService: vi.fn().mockResolvedValue({} as TaskService),
     });
 
     await expect(tool.execute("tool-call-1", { taskId: "task-123" })).rejects.toThrow(
-      "task_update requires at least one supported field: status, priority, or description"
+      "task_update failed: task_update requires at least one supported field: status, priority, or description"
     );
   });
 
@@ -258,6 +271,19 @@ describe("createTaskCommentCreateToolDefinition", () => {
       taskId: "task-123",
       comment,
     });
+  });
+
+  it("surfaces validation failures with tool-specific context", async () => {
+    const tool = createTaskCommentCreateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", {
+        taskId: "task-123",
+        content: "   ",
+      })
+    ).rejects.toThrow("task_comment_create failed: content is required");
   });
 
   it("surfaces service failures with tool-specific context", async () => {
