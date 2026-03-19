@@ -29,7 +29,10 @@ describe("createToduTaskService", () => {
         author: "user",
         createdAt: "2026-03-18T00:00:00.000Z",
       }),
-      on: vi.fn(),
+      listProjects: vi.fn().mockResolvedValue([]),
+      getProject: vi.fn().mockResolvedValue(null),
+      listTaskComments: vi.fn().mockResolvedValue([]),
+      on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
 
