@@ -5,14 +5,25 @@ import {
   type ToduTaskServiceRuntime,
 } from "../services/todu/default-task-service";
 import type { ToduDaemonConnectionState } from "../services/todu/daemon-connection";
-import type { ToduDaemonEvent, ToduDaemonSubscription } from "../services/todu/daemon-events";
+import type { ToduDaemonSubscription } from "../services/todu/daemon-events";
 
 const SYNC_STATUS_KEY = "todu-sync-status";
-const KNOWN_SYNC_STATUSES = ["running", "idle", "blocked", "error"] as const;
+const KNOWN_SYNC_STATUSES = ["disconnected", "connected", "syncing"] as const;
 
 type KnownSyncStatus = (typeof KNOWN_SYNC_STATUSES)[number];
 
 type SyncStatusValue = "unknown" | KnownSyncStatus | `custom:${string}`;
+
+interface ToduSyncStatusSnapshot {
+  local?: {
+    mode?: string;
+  };
+  remote?: {
+    state?: string;
+    server?: string;
+    lastSync?: string;
+  };
+}
 
 export interface SyncStatusContextState {
   syncStatus: SyncStatusValue;
@@ -55,6 +66,19 @@ const createSyncStatusContextController = (
     }
   };
 
+  const refreshSyncStatus = async (): Promise<void> => {
+    const statusResult = await runtime.connection.request<ToduSyncStatusSnapshot>(
+      "sync.status",
+      {}
+    );
+    if (!statusResult.ok) {
+      updateSyncStatus("unknown");
+      return;
+    }
+
+    updateSyncStatus(normalizeSyncStatus(statusResult.value));
+  };
+
   const ensureConnectionStateSubscription = (): void => {
     if (connectionStateSubscription) {
       return;
@@ -62,6 +86,9 @@ const createSyncStatusContextController = (
 
     connectionStateSubscription = runtime.connection.subscribe((state) => {
       handleConnectionStateChange(state, updateSyncStatus);
+      if (state.status === "connected") {
+        void refreshSyncStatus();
+      }
     });
   };
 
@@ -77,7 +104,7 @@ const createSyncStatusContextController = (
 
     subscribePromise = runtime.client
       .on("sync.statusChanged", (event) => {
-        updateSyncStatus(normalizeSyncStatus(event));
+        updateSyncStatus(normalizeSyncStatus(event.payload));
       })
       .then((subscription) => {
         syncEventSubscription = subscription;
@@ -98,9 +125,13 @@ const createSyncStatusContextController = (
       ensureConnectionStateSubscription();
       await ensureSyncEventSubscription();
       updateAmbientUi(ctx);
-      void runtime.connection.connect().catch(() => {
+
+      try {
+        await runtime.connection.connect();
+        await refreshSyncStatus();
+      } catch {
         updateSyncStatus("unknown");
-      });
+      }
     },
 
     async dispose(): Promise<void> {
@@ -124,8 +155,8 @@ const handleConnectionStateChange = (
   }
 };
 
-const normalizeSyncStatus = (event: Pick<ToduDaemonEvent, "payload">): SyncStatusValue => {
-  const rawStatus = extractSyncStatus(event.payload);
+const normalizeSyncStatus = (payload: unknown): SyncStatusValue => {
+  const rawStatus = extractSyncStatus(payload);
   if (!rawStatus) {
     return "unknown";
   }
@@ -152,6 +183,7 @@ const extractSyncStatus = (payload: unknown): string | null => {
   }
 
   const candidate =
+    readNestedString(payload, "remote", "state") ??
     readString(payload, "status") ??
     readString(payload, "state") ??
     readNestedString(payload, "binding", "state") ??
