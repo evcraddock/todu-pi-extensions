@@ -1,0 +1,255 @@
+import { StringEnum } from "@mariozechner/pi-ai";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
+
+import type {
+  TaskDetail,
+  TaskFilter,
+  TaskId,
+  TaskPriority,
+  TaskStatus,
+  TaskSummary,
+} from "../domain/task";
+import { browseTasks } from "../flows/browse-tasks";
+import { showTaskDetail } from "../flows/show-task-detail";
+import type { TaskService } from "../services/task-service";
+
+const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelled"] as const;
+const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
+const MAX_TASK_LIST_PREVIEW_COUNT = 25;
+const MAX_COMMENT_PREVIEW_COUNT = 5;
+
+const TaskListParams = Type.Object({
+  statuses: Type.Optional(
+    Type.Array(StringEnum(TASK_STATUS_VALUES), {
+      description: "Optional task status filters",
+    })
+  ),
+  priorities: Type.Optional(
+    Type.Array(StringEnum(TASK_PRIORITY_VALUES), {
+      description: "Optional task priority filters",
+    })
+  ),
+  projectId: Type.Optional(Type.String({ description: "Optional project ID filter" })),
+  query: Type.Optional(Type.String({ description: "Optional title search query" })),
+});
+
+const TaskShowParams = Type.Object({
+  taskId: Type.String({ description: "Task ID" }),
+});
+
+interface TaskListToolParams {
+  statuses?: TaskStatus[];
+  priorities?: TaskPriority[];
+  projectId?: string;
+  query?: string;
+}
+
+interface TaskShowToolParams {
+  taskId: TaskId;
+}
+
+interface TaskListToolDetails {
+  kind: "task_list";
+  filter: TaskFilter;
+  tasks: TaskSummary[];
+  total: number;
+  empty: boolean;
+}
+
+interface TaskShowToolDetails {
+  kind: "task_show";
+  taskId: TaskId;
+  found: boolean;
+  task?: TaskDetail;
+}
+
+interface TaskReadToolDependencies {
+  getTaskService: () => Promise<TaskService>;
+}
+
+const createTaskListToolDefinition = ({ getTaskService }: TaskReadToolDependencies) => ({
+  name: "task_list",
+  label: "Task List",
+  description: "List tasks with optional status, priority, project, or title filters.",
+  promptSnippet: "List tasks using structured filters for status, priority, project, or query.",
+  promptGuidelines: [
+    "Use this tool for backend task lookups in normal chat instead of slash-command task browsing.",
+  ],
+  parameters: TaskListParams,
+  async execute(_toolCallId: string, params: TaskListToolParams) {
+    const filter = normalizeTaskListFilter(params);
+
+    try {
+      const taskService = await getTaskService();
+      const tasks = await browseTasks({ taskService }, filter);
+      const details: TaskListToolDetails = {
+        kind: "task_list",
+        filter,
+        tasks,
+        total: tasks.length,
+        empty: tasks.length === 0,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: formatTaskListContent(details) }],
+        details,
+      };
+    } catch (error) {
+      throw new Error(formatToolError(error, "task_list failed"), { cause: error });
+    }
+  },
+});
+
+const createTaskShowToolDefinition = ({ getTaskService }: TaskReadToolDependencies) => ({
+  name: "task_show",
+  label: "Task Show",
+  description: "Show task details, including description and recent comments.",
+  promptSnippet: "Show details for a specific task by task ID.",
+  promptGuidelines: [
+    "Use this tool when the user asks for details about a known task ID.",
+    "If the task is missing, report the explicit not-found result instead of guessing.",
+  ],
+  parameters: TaskShowParams,
+  async execute(_toolCallId: string, params: TaskShowToolParams) {
+    try {
+      const taskService = await getTaskService();
+      const task = await showTaskDetail({ taskService }, params.taskId);
+      if (!task) {
+        const details: TaskShowToolDetails = {
+          kind: "task_show",
+          taskId: params.taskId,
+          found: false,
+        };
+
+        return {
+          content: [{ type: "text" as const, text: `Task not found: ${params.taskId}` }],
+          details,
+        };
+      }
+
+      const details: TaskShowToolDetails = {
+        kind: "task_show",
+        taskId: params.taskId,
+        found: true,
+        task,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: formatTaskShowContent(task) }],
+        details,
+      };
+    } catch (error) {
+      throw new Error(formatToolError(error, "task_show failed"), { cause: error });
+    }
+  },
+});
+
+const registerTaskReadTools = (
+  pi: Pick<ExtensionAPI, "registerTool">,
+  dependencies: TaskReadToolDependencies
+): void => {
+  pi.registerTool(createTaskListToolDefinition(dependencies));
+  pi.registerTool(createTaskShowToolDefinition(dependencies));
+};
+
+const normalizeTaskListFilter = (params: TaskListToolParams): TaskFilter => ({
+  statuses: normalizeArrayFilter(params.statuses),
+  priorities: normalizeArrayFilter(params.priorities),
+  projectId: normalizeOptionalText(params.projectId),
+  query: normalizeOptionalText(params.query),
+});
+
+const normalizeArrayFilter = <TValue extends string>(
+  values: TValue[] | undefined
+): TValue[] | undefined => (values && values.length > 0 ? [...values] : undefined);
+
+const normalizeOptionalText = (value: string | null | undefined): string | undefined => {
+  const trimmedValue = value?.trim();
+  return trimmedValue && trimmedValue.length > 0 ? trimmedValue : undefined;
+};
+
+const formatTaskListContent = (details: TaskListToolDetails): string => {
+  if (details.empty) {
+    return "No tasks found.";
+  }
+
+  const previewTasks = details.tasks.slice(0, MAX_TASK_LIST_PREVIEW_COUNT);
+  const lines = [`Tasks (${details.total}):`];
+
+  for (const task of previewTasks) {
+    lines.push(`- ${formatTaskSummaryLine(task)}`);
+  }
+
+  const remainingCount = details.total - previewTasks.length;
+  if (remainingCount > 0) {
+    lines.push(`- ... ${remainingCount} more task(s)`);
+  }
+
+  return lines.join("\n");
+};
+
+const formatTaskSummaryLine = (task: TaskSummary): string => {
+  const projectLabel = task.projectName ?? task.projectId ?? "no project";
+  return `${task.id} • ${task.title} • ${task.status} • ${task.priority} • ${projectLabel}`;
+};
+
+const formatTaskShowContent = (task: TaskDetail): string => {
+  const lines = [
+    `Task ${task.id}: ${task.title}`,
+    "",
+    `Status: ${task.status}`,
+    `Priority: ${task.priority}`,
+    `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
+    `Labels: ${task.labels.length > 0 ? task.labels.join(", ") : "none"}`,
+    "",
+    "Description:",
+    task.description?.trim().length ? task.description : "(none)",
+    "",
+    `Recent comments (${task.comments.length}):`,
+  ];
+
+  if (task.comments.length === 0) {
+    lines.push("- (none)");
+    return lines.join("\n");
+  }
+
+  const previewComments = task.comments.slice(0, MAX_COMMENT_PREVIEW_COUNT);
+  for (const comment of previewComments) {
+    lines.push(`- [${comment.createdAt}] ${comment.author}`);
+    lines.push(...indentLines(comment.content || "(empty)", 2));
+    lines.push("");
+  }
+
+  const remainingCount = task.comments.length - previewComments.length;
+  if (remainingCount > 0) {
+    lines.push(`- ... ${remainingCount} older comment(s) omitted`);
+  } else if (lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  return lines.join("\n");
+};
+
+const indentLines = (content: string, spaces: number): string[] => {
+  const indent = " ".repeat(spaces);
+  return content.split(/\r?\n/).map((line) => `${indent}${line}`);
+};
+
+const formatToolError = (error: unknown, prefix: string): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return `${prefix}: ${error.message}`;
+  }
+
+  return prefix;
+};
+
+export type { TaskListToolDetails, TaskShowToolDetails, TaskReadToolDependencies };
+export {
+  createTaskListToolDefinition,
+  createTaskShowToolDefinition,
+  formatTaskListContent,
+  formatTaskShowContent,
+  normalizeTaskListFilter,
+  registerTaskReadTools,
+};
