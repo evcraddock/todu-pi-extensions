@@ -43,6 +43,7 @@ describe("createToduDaemonClient", () => {
         status: "cancelled",
         priority: "high",
         projectId: "proj-1",
+        projectName: null,
         labels: ["daemon"],
       },
     ]);
@@ -101,6 +102,7 @@ describe("createToduDaemonClient", () => {
       status: "active",
       priority: "medium",
       projectId: "proj-1",
+      projectName: null,
       labels: ["daemon"],
       description: "Implement the typed client wrapper",
       comments: [

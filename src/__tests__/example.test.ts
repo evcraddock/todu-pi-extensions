@@ -10,13 +10,14 @@ describe("task list UI scaffolding", () => {
       status: "active",
       priority: "high",
       projectId: "proj-1",
+      projectName: "Foundation",
       labels: ["foundation"],
     });
 
     expect(item).toEqual({
       value: "task-123",
       label: "Implement module layout",
-      description: "active • high • proj-1",
+      description: "active • high • Foundation",
     });
   });
 });

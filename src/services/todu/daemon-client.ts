@@ -234,6 +234,7 @@ const mapTaskSummary = (task: ToduTask): TaskSummary => ({
   status: toLocalTaskStatus(task.status),
   priority: toLocalTaskPriority(task.priority),
   projectId: task.projectId ?? null,
+  projectName: null,
   labels: [...task.labels],
 });
 

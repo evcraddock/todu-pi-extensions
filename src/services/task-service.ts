@@ -1,4 +1,5 @@
 import type {
+  ProjectSummary,
   TaskComment,
   TaskDetail,
   TaskFilter,
@@ -33,4 +34,7 @@ export interface TaskService {
   createTask(input: CreateTaskInput): Promise<TaskDetail>;
   updateTask(input: UpdateTaskInput): Promise<TaskDetail>;
   addTaskComment(input: AddTaskCommentInput): Promise<TaskComment>;
+  listProjects(): Promise<ProjectSummary[]>;
+  getProject(projectId: string): Promise<ProjectSummary | null>;
+  listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
 }
