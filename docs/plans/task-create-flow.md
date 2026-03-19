@@ -59,10 +59,10 @@ Proposed V1 flow:
    - description (optional)
 4. The extension submits `TaskService.createTask()`.
 5. On success, the extension shows a success notification.
-6. The extension sets the new task as the current task by default.
-7. The extension opens the new task detail view.
+6. The extension opens the new task detail view.
+7. The extension does not automatically change the current task context.
 
-This keeps create behavior aligned with the existing browse/detail workflow instead of inventing a separate post-create path.
+This keeps create behavior aligned with the existing browse/detail workflow without unexpectedly replacing the user's current task context.
 
 ### Error, empty, and cancel states
 
@@ -104,8 +104,8 @@ V1 should submit `title`, required `projectId`, and optional `description`.
 
 Session/UI behavior after success:
 
-- the new task should become current automatically after successful creation
-- use the existing `CurrentTaskContextController` for the current-task update
+- the new task should open in detail after successful creation
+- the current task should remain unchanged unless the user explicitly sets it later
 - after creation, opening task detail should reuse existing detail flow rather than duplicating rendering logic
 
 Implementation shape options:
@@ -136,14 +136,14 @@ Manual verification should confirm:
 - cancellation exits cleanly
 - task creation failures surface a clear error
 - created task can be opened immediately in detail view
-- current-task widget/status update automatically after successful creation
+- current-task widget/status remain unchanged after successful creation unless the user explicitly sets the new task as current
 
 ## Open questions
 
 These should be resolved before marking the plan `ready-for-tasking`.
 
 - [x] V1 should use one command only: `/task-new`. Detail-level follow-up task creation is deferred.
-- [x] After successful creation, the new task should become current by default.
+- [x] After successful creation, the new task should open in detail without automatically becoming current.
 - [x] The required title should use an inline prompt.
 - [x] V1 must require explicit project selection during task creation.
 
@@ -166,10 +166,10 @@ Intentional deferral candidates:
    - gather title and optional description using chosen built-ins
    - success criteria: successful submit path reaches `TaskService.createTask()`
 
-3. **Integrate post-create detail/current-task behavior**
-   - set the created task as current
+3. **Integrate post-create detail behavior**
    - open created task in existing detail flow
-   - success criteria: success path feels coherent with current browse/detail UX
+   - preserve the existing current-task context
+   - success criteria: success path feels coherent with current browse/detail UX without replacing the user's current task
 
 4. **Add tests for create flow**
    - success, cancel, validation, and failure coverage

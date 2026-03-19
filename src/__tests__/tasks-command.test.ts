@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { TaskDetail, TaskSummary } from "@/domain/task";
+import type { ProjectSummary, TaskDetail, TaskSummary } from "@/domain/task";
 import {
   createTaskClearCommandHandler,
   createTaskCommandHandler,
+  createTaskNewCommandHandler,
   createTasksCommandHandler,
   DEFAULT_BROWSE_TASKS_FILTER,
   openSelectedTaskDetail,
@@ -30,18 +31,28 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   ...overrides,
 });
 
+const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
+  id: "proj-1",
+  name: "Todu Pi Extensions",
+  status: "active",
+  priority: "medium",
+  description: "Primary project",
+  ...overrides,
+});
+
 const createCommandContext = () => ({
   hasUI: true,
   ui: {
     notify: vi.fn(),
     setEditorText: vi.fn(),
+    input: vi.fn(),
     editor: vi.fn(),
     custom: vi.fn(),
   },
 });
 
 describe("registerCommands", () => {
-  it("registers the /tasks, /task, and /task-clear commands", () => {
+  it("registers the /tasks, /task, /task-clear, and /task-new commands", () => {
     const pi = {
       appendEntry: vi.fn(),
       registerCommand: vi.fn(),
@@ -67,6 +78,13 @@ describe("registerCommands", () => {
       "task-clear",
       expect.objectContaining({
         description: "Clear the current task context",
+        handler: expect.any(Function),
+      })
+    );
+    expect(pi.registerCommand).toHaveBeenCalledWith(
+      "task-new",
+      expect.objectContaining({
+        description: "Create a new todu task",
         handler: expect.any(Function),
       })
     );
@@ -208,6 +226,161 @@ describe("createTaskCommandHandler", () => {
     expect(context.ui.notify).toHaveBeenCalledWith(
       "No task selected. Run /tasks or pass a task ID.",
       "warning"
+    );
+  });
+});
+
+describe("createTaskNewCommandHandler", () => {
+  it("requires interactive mode without calling UI APIs", async () => {
+    const context = createCommandContext();
+    context.hasUI = false;
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const handler = createTaskNewCommandHandler();
+
+    await handler("", context as never);
+
+    expect(stderrWrite).toHaveBeenCalledWith("/task-new requires interactive mode\n");
+    expect(context.ui.notify).not.toHaveBeenCalled();
+
+    stderrWrite.mockRestore();
+  });
+
+  it("re-prompts when the title is blank before creating the task", async () => {
+    const context = createCommandContext();
+    context.ui.input = vi
+      .fn()
+      .mockResolvedValueOnce("   ")
+      .mockResolvedValueOnce("Implement /task-new");
+    const project = createProjectSummary();
+    const createdTask = createTaskDetail({
+      id: "task-new-1",
+      title: "Implement /task-new",
+      projectId: project.id,
+      projectName: project.name,
+    });
+    const taskService = {
+      createTask: vi.fn().mockResolvedValue(createdTask),
+    } as unknown as TaskService;
+    const setCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const openTaskDetail = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskNewCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
+      editTaskDescription: vi.fn().mockResolvedValue(""),
+      setCurrentTask,
+      openTaskDetail,
+    });
+
+    await handler("", context as never);
+
+    expect(context.ui.notify).toHaveBeenCalledWith("Task title is required", "warning");
+    expect(taskService.createTask).toHaveBeenCalledWith({
+      title: "Implement /task-new",
+      projectId: project.id,
+      description: null,
+    });
+    expect(setCurrentTask).not.toHaveBeenCalled();
+    expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, createdTask.id);
+  });
+
+  it("cancels cleanly when project selection is dismissed", async () => {
+    const context = createCommandContext();
+    const taskService = {
+      createTask: vi.fn(),
+    } as unknown as TaskService;
+    const handler = createTaskNewCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
+      selectTaskProject: vi.fn().mockResolvedValue({ status: "cancelled" }),
+      editTaskDescription: vi.fn(),
+      openTaskDetail: vi.fn(),
+      setCurrentTask: vi.fn(),
+    });
+
+    await handler("", context as never);
+
+    expect(taskService.createTask).not.toHaveBeenCalled();
+    expect(context.ui.notify).toHaveBeenCalledWith("Task creation cancelled", "info");
+  });
+
+  it("requires project selection before submission", async () => {
+    const context = createCommandContext();
+    const taskService = {
+      createTask: vi.fn(),
+    } as unknown as TaskService;
+    const handler = createTaskNewCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
+      selectTaskProject: vi.fn().mockResolvedValue({ status: "unavailable" }),
+      editTaskDescription: vi.fn(),
+      openTaskDetail: vi.fn(),
+      setCurrentTask: vi.fn(),
+    });
+
+    await handler("", context as never);
+
+    expect(taskService.createTask).not.toHaveBeenCalled();
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      "No projects available for new tasks",
+      "warning"
+    );
+  });
+
+  it("creates the task and opens task detail without changing the current task", async () => {
+    const context = createCommandContext();
+    const project = createProjectSummary();
+    const createdTask = createTaskDetail({
+      id: "task-new-1",
+      title: "Implement /task-new",
+      projectId: project.id,
+      projectName: project.name,
+    });
+    const taskService = {
+      createTask: vi.fn().mockResolvedValue(createdTask),
+    } as unknown as TaskService;
+    const setCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const openTaskDetail = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskNewCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
+      selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
+      editTaskDescription: vi.fn().mockResolvedValue("Draft the first version"),
+      setCurrentTask,
+      openTaskDetail,
+    });
+
+    await handler("", context as never);
+
+    expect(taskService.createTask).toHaveBeenCalledWith({
+      title: "Implement /task-new",
+      projectId: project.id,
+      description: "Draft the first version",
+    });
+    expect(setCurrentTask).not.toHaveBeenCalled();
+    expect(context.ui.notify).toHaveBeenCalledWith(`Created task ${createdTask.title}`, "info");
+    expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, createdTask.id);
+  });
+
+  it("surfaces creation failures with a contextual error", async () => {
+    const context = createCommandContext();
+    const project = createProjectSummary();
+    const taskService = {
+      createTask: vi.fn().mockRejectedValue(new Error("daemon unavailable")),
+    } as unknown as TaskService;
+    const handler = createTaskNewCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
+      selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
+      editTaskDescription: vi.fn().mockResolvedValue(""),
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      openTaskDetail: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await handler("", context as never);
+
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      "Failed to create task: daemon unavailable",
+      "error"
     );
   });
 });
