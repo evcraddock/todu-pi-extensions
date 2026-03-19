@@ -1,5 +1,5 @@
-import type { TaskId } from "@/domain/task";
-import type { TaskSessionStore } from "@/services/task-session-store";
+import type { TaskId } from "../domain/task";
+import type { TaskSessionStore } from "../services/task-session-store";
 
 export interface PickCurrentTaskDependencies {
   taskSessionStore: TaskSessionStore;

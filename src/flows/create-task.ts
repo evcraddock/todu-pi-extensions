@@ -1,5 +1,5 @@
-import type { TaskDetail } from "@/domain/task";
-import type { CreateTaskInput, TaskService } from "@/services/task-service";
+import type { TaskDetail } from "../domain/task";
+import type { CreateTaskInput, TaskService } from "../services/task-service";
 
 export interface CreateTaskDependencies {
   taskService: TaskService;

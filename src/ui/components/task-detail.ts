@@ -1,5 +1,5 @@
-import type { TaskDetail } from "@/domain/task";
-import { formatTaskDetail } from "@/utils/task-format";
+import type { TaskDetail } from "../../domain/task";
+import { formatTaskDetail } from "../../utils/task-format";
 
 export interface TaskDetailViewModel {
   title: string;

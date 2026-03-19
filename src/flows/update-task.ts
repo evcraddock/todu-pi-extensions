@@ -1,5 +1,5 @@
-import type { TaskDetail } from "@/domain/task";
-import type { TaskService, UpdateTaskInput } from "@/services/task-service";
+import type { TaskDetail } from "../domain/task";
+import type { TaskService, UpdateTaskInput } from "../services/task-service";
 
 export interface UpdateTaskDependencies {
   taskService: TaskService;

@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskStatus } from "@/domain/task";
+import type { TaskPriority, TaskStatus } from "../../domain/task";
 
 export interface TaskSettingOption<TValue extends string> {
   label: string;

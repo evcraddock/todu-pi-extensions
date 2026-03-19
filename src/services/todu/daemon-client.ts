@@ -15,22 +15,15 @@ import type {
   TaskPriority,
   TaskStatus,
   TaskSummary,
-} from "@/domain/task";
-import type {
-  AddTaskCommentInput,
-  CreateTaskInput,
-  UpdateTaskInput,
-} from "@/services/task-service";
-import type {
-  ToduDaemonConnection,
-  ToduDaemonConnectionError,
-} from "@/services/todu/daemon-connection";
+} from "../../domain/task";
+import type { AddTaskCommentInput, CreateTaskInput, UpdateTaskInput } from "../task-service";
+import type { ToduDaemonConnection, ToduDaemonConnectionError } from "./daemon-connection";
 import type {
   ToduDaemonEvent,
   ToduDaemonEventListener,
   ToduDaemonEventName,
   ToduDaemonSubscription,
-} from "@/services/todu/daemon-events";
+} from "./daemon-events";
 
 export type ToduDaemonClientErrorCode =
   | "not-found"

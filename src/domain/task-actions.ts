@@ -1,4 +1,4 @@
-import type { TaskId, TaskPriority, TaskStatus } from "@/domain/task";
+import type { TaskId, TaskPriority, TaskStatus } from "./task";
 
 export type TaskFlowId =
   | "browse-tasks"

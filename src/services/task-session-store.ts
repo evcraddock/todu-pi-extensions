@@ -1,4 +1,4 @@
-import type { TaskId } from "@/domain/task";
+import type { TaskId } from "../domain/task";
 
 export interface TaskSessionState {
   currentTaskId: TaskId | null;

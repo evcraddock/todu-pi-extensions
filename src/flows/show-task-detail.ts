@@ -1,5 +1,5 @@
-import type { TaskDetail, TaskId } from "@/domain/task";
-import type { TaskService } from "@/services/task-service";
+import type { TaskDetail, TaskId } from "../domain/task";
+import type { TaskService } from "../services/task-service";
 
 export interface ShowTaskDetailDependencies {
   taskService: TaskService;
