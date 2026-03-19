@@ -360,15 +360,19 @@ const openTaskDetailHub = async (
         continue;
       }
 
-      const updatedTask = await updateTask(
-        { taskService },
-        {
-          taskId: task.id,
-          status: nextStatus,
-        }
-      );
-      await syncCurrentTaskIfFocused(ctx, updatedTask, dependencies.setCurrentTask);
-      ctx.ui.notify(`Updated ${task.title} to ${nextStatus}`, "info");
+      try {
+        const updatedTask = await updateTask(
+          { taskService },
+          {
+            taskId: task.id,
+            status: nextStatus,
+          }
+        );
+        await syncCurrentTaskIfFocused(ctx, updatedTask, dependencies.setCurrentTask);
+        ctx.ui.notify(`Updated ${task.title} to ${nextStatus}`, "info");
+      } catch (error) {
+        ctx.ui.notify(formatTasksCommandError(error, "Failed to update task status"), "error");
+      }
       continue;
     }
 
@@ -378,15 +382,19 @@ const openTaskDetailHub = async (
         continue;
       }
 
-      const updatedTask = await updateTask(
-        { taskService },
-        {
-          taskId: task.id,
-          priority: nextPriority,
-        }
-      );
-      await syncCurrentTaskIfFocused(ctx, updatedTask, dependencies.setCurrentTask);
-      ctx.ui.notify(`Updated ${task.title} priority to ${nextPriority}`, "info");
+      try {
+        const updatedTask = await updateTask(
+          { taskService },
+          {
+            taskId: task.id,
+            priority: nextPriority,
+          }
+        );
+        await syncCurrentTaskIfFocused(ctx, updatedTask, dependencies.setCurrentTask);
+        ctx.ui.notify(`Updated ${task.title} priority to ${nextPriority}`, "info");
+      } catch (error) {
+        ctx.ui.notify(formatTasksCommandError(error, "Failed to update task priority"), "error");
+      }
       continue;
     }
 

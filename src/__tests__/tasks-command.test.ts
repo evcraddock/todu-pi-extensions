@@ -283,6 +283,58 @@ describe("openTaskDetailHub", () => {
     expect(setCurrentTask).not.toHaveBeenCalled();
   });
 
+  it("surfaces status update failures without leaving the detail hub", async () => {
+    const context = createCommandContext();
+    const task = createTaskDetail();
+    const showTaskDetailView = vi
+      .fn()
+      .mockResolvedValueOnce("update-status")
+      .mockResolvedValueOnce(null);
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(task),
+      updateTask: vi.fn().mockRejectedValue(new Error("daemon unavailable")),
+      addTaskComment: vi.fn(),
+    } as unknown as TaskService;
+
+    await openTaskDetailHub(context as never, taskService, task.id, {
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      showTaskDetailView,
+      selectTaskStatus: vi.fn().mockResolvedValue("done"),
+    });
+
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      "Failed to update task status: daemon unavailable",
+      "error"
+    );
+    expect(showTaskDetailView).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces priority update failures without leaving the detail hub", async () => {
+    const context = createCommandContext();
+    const task = createTaskDetail();
+    const showTaskDetailView = vi
+      .fn()
+      .mockResolvedValueOnce("update-priority")
+      .mockResolvedValueOnce(null);
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(task),
+      updateTask: vi.fn().mockRejectedValue(new Error("daemon unavailable")),
+      addTaskComment: vi.fn(),
+    } as unknown as TaskService;
+
+    await openTaskDetailHub(context as never, taskService, task.id, {
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      showTaskDetailView,
+      selectTaskPriority: vi.fn().mockResolvedValue("low"),
+    });
+
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      "Failed to update task priority: daemon unavailable",
+      "error"
+    );
+    expect(showTaskDetailView).toHaveBeenCalledTimes(2);
+  });
+
   it("does not update task priority when the selected value is unchanged", async () => {
     const context = createCommandContext();
     const task = createTaskDetail();
