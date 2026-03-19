@@ -1,6 +1,6 @@
-import type { TaskDetail, TaskStatus } from "../../domain/task";
+import type { TaskDetail, TaskPriority, TaskStatus } from "../../domain/task";
 
-export type TaskDetailActionKind = "set-current" | "update-status" | "comment";
+export type TaskDetailActionKind = "set-current" | "update-status" | "update-priority" | "comment";
 
 export interface TaskDetailActionItem {
   value: TaskDetailActionKind;
@@ -35,6 +35,11 @@ const createTaskDetailActionItems = (task: TaskDetail): TaskDetailActionItem[] =
     value: "update-status",
     label: "Update status",
     description: `Change status from ${formatTaskStatusLabel(task.status)}`,
+  },
+  {
+    value: "update-priority",
+    label: "Update priority",
+    description: `Change priority from ${formatTaskPriorityLabel(task.priority)}`,
   },
   {
     value: "comment",
@@ -87,10 +92,14 @@ const formatTaskStatusLabel = (status: TaskStatus): string => {
   }
 };
 
+const formatTaskPriorityLabel = (priority: TaskPriority): string =>
+  priority.charAt(0).toUpperCase() + priority.slice(1);
+
 export {
   createTaskDetailActionItems,
   createTaskDetailBody,
   createTaskDetailViewModel,
   DEFAULT_RECENT_COMMENT_LIMIT,
+  formatTaskPriorityLabel,
   formatTaskStatusLabel,
 };
