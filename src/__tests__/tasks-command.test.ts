@@ -252,6 +252,58 @@ describe("openTaskDetailHub", () => {
     expect(context.ui.notify).toHaveBeenCalledWith(`Updated ${initialTask.title} to done`, "info");
   });
 
+  it("updates task priority from the detail hub", async () => {
+    const context = createCommandContext();
+    const initialTask = createTaskDetail();
+    const updatedTask = createTaskDetail({ priority: "low" });
+    const setCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const taskService = {
+      getTask: vi.fn().mockResolvedValueOnce(initialTask).mockResolvedValueOnce(updatedTask),
+      updateTask: vi.fn().mockResolvedValue(updatedTask),
+      addTaskComment: vi.fn(),
+    } as unknown as TaskService;
+
+    await openTaskDetailHub(context as never, taskService, initialTask.id, {
+      setCurrentTask,
+      showTaskDetailView: vi
+        .fn()
+        .mockResolvedValueOnce("update-priority")
+        .mockResolvedValueOnce(null),
+      selectTaskPriority: vi.fn().mockResolvedValue("low"),
+    });
+
+    expect(taskService.updateTask).toHaveBeenCalledWith({
+      taskId: initialTask.id,
+      priority: "low",
+    });
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      `Updated ${initialTask.title} priority to low`,
+      "info"
+    );
+    expect(setCurrentTask).not.toHaveBeenCalled();
+  });
+
+  it("does not update task priority when the selected value is unchanged", async () => {
+    const context = createCommandContext();
+    const task = createTaskDetail();
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(task),
+      updateTask: vi.fn(),
+      addTaskComment: vi.fn(),
+    } as unknown as TaskService;
+
+    await openTaskDetailHub(context as never, taskService, task.id, {
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      showTaskDetailView: vi
+        .fn()
+        .mockResolvedValueOnce("update-priority")
+        .mockResolvedValueOnce(null),
+      selectTaskPriority: vi.fn().mockResolvedValue(task.priority),
+    });
+
+    expect(taskService.updateTask).not.toHaveBeenCalled();
+  });
+
   it("adds a comment from the detail hub", async () => {
     const context = createCommandContext();
     const task = createTaskDetail();

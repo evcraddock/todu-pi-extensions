@@ -63,6 +63,11 @@ describe("task detail view model", () => {
         description: "Change status from Active",
       },
       {
+        value: "update-priority",
+        label: "Update priority",
+        description: "Change priority from High",
+      },
+      {
         value: "comment",
         label: "Add comment",
         description: "Open the editor to add a progress note or comment",

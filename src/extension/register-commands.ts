@@ -2,7 +2,14 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Container, matchesKey, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 
-import type { TaskDetail, TaskFilter, TaskId, TaskStatus, TaskSummary } from "../domain/task";
+import type {
+  TaskDetail,
+  TaskFilter,
+  TaskId,
+  TaskPriority,
+  TaskStatus,
+  TaskSummary,
+} from "../domain/task";
 import { browseTasks } from "../flows/browse-tasks";
 import { commentOnTask } from "../flows/comment-on-task";
 import { showTaskDetail } from "../flows/show-task-detail";
@@ -12,11 +19,17 @@ import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-
 import {
   createTaskDetailActionItems,
   createTaskDetailViewModel,
+  formatTaskPriorityLabel,
+  formatTaskStatusLabel,
   type TaskDetailActionKind,
 } from "../ui/components/task-detail";
 import { createTaskListItem } from "../ui/components/task-list";
 import { createTaskLoaderViewModel } from "../ui/components/loaders";
-import { taskStatusOptions } from "../ui/components/task-settings";
+import {
+  taskPriorityOptions,
+  taskStatusOptions,
+  type TaskSettingOption,
+} from "../ui/components/task-settings";
 import { getDefaultCurrentTaskContextController } from "./current-task-context";
 
 const DEFAULT_BROWSE_TASKS_FILTER: TaskFilter = {
@@ -54,6 +67,10 @@ export interface RegisterCommandDependencies {
     task: TaskDetail
   ) => Promise<TaskDetailActionKind | null>;
   selectTaskStatus?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<TaskStatus | null>;
+  selectTaskPriority?: (
+    ctx: ExtensionCommandContext,
+    task: TaskDetail
+  ) => Promise<TaskPriority | null>;
   editTaskComment?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<string | null>;
   openTaskDetail?: (
     ctx: ExtensionCommandContext,
@@ -81,6 +98,7 @@ const createTasksCommandHandler = (
         setCurrentTask,
         showTaskDetailView: dependencies.showTaskDetailView,
         selectTaskStatus: dependencies.selectTaskStatus,
+        selectTaskPriority: dependencies.selectTaskPriority,
         editTaskComment: dependencies.editTaskComment,
       }));
 
@@ -141,6 +159,7 @@ const createTaskCommandHandler = (
         setCurrentTask,
         showTaskDetailView: dependencies.showTaskDetailView,
         selectTaskStatus: dependencies.selectTaskStatus,
+        selectTaskPriority: dependencies.selectTaskPriority,
         editTaskComment: dependencies.editTaskComment,
       }));
 
@@ -284,6 +303,10 @@ interface OpenTaskDetailDependencies {
     task: TaskDetail
   ) => Promise<TaskDetailActionKind | null>;
   selectTaskStatus?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<TaskStatus | null>;
+  selectTaskPriority?: (
+    ctx: ExtensionCommandContext,
+    task: TaskDetail
+  ) => Promise<TaskPriority | null>;
   editTaskComment?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<string | null>;
 }
 
@@ -310,6 +333,7 @@ const openTaskDetailHub = async (
 ): Promise<void> => {
   const showTaskDetailView = dependencies.showTaskDetailView ?? selectTaskDetailAction;
   const selectStatus = dependencies.selectTaskStatus ?? selectTaskStatusFromList;
+  const selectPriority = dependencies.selectTaskPriority ?? selectTaskPriorityFromList;
   const editComment = dependencies.editTaskComment ?? editTaskComment;
 
   while (true) {
@@ -345,6 +369,24 @@ const openTaskDetailHub = async (
       );
       await syncCurrentTaskIfFocused(ctx, updatedTask, dependencies.setCurrentTask);
       ctx.ui.notify(`Updated ${task.title} to ${nextStatus}`, "info");
+      continue;
+    }
+
+    if (action === "update-priority") {
+      const nextPriority = await selectPriority(ctx, task);
+      if (!nextPriority || nextPriority === task.priority) {
+        continue;
+      }
+
+      const updatedTask = await updateTask(
+        { taskService },
+        {
+          taskId: task.id,
+          priority: nextPriority,
+        }
+      );
+      await syncCurrentTaskIfFocused(ctx, updatedTask, dependencies.setCurrentTask);
+      ctx.ui.notify(`Updated ${task.title} priority to ${nextPriority}`, "info");
       continue;
     }
 
@@ -412,19 +454,54 @@ const selectTaskDetailAction = async (
 const selectTaskStatusFromList = async (
   ctx: ExtensionCommandContext,
   task: TaskDetail
-): Promise<TaskStatus | null> => {
-  const items: SelectItem[] = taskStatusOptions.map((option) => ({
+): Promise<TaskStatus | null> =>
+  selectTaskSettingFromList(ctx, {
+    title: `Update status · ${task.title}`,
+    options: taskStatusOptions,
+    currentValue: task.status,
+    currentLabel: formatTaskStatusLabel(task.status),
+    actionLabel: "status",
+  });
+
+const selectTaskPriorityFromList = async (
+  ctx: ExtensionCommandContext,
+  task: TaskDetail
+): Promise<TaskPriority | null> =>
+  selectTaskSettingFromList(ctx, {
+    title: `Update priority · ${task.title}`,
+    options: taskPriorityOptions,
+    currentValue: task.priority,
+    currentLabel: formatTaskPriorityLabel(task.priority),
+    actionLabel: "priority",
+  });
+
+interface SelectTaskSettingFromListOptions<TValue extends string> {
+  title: string;
+  options: TaskSettingOption<TValue>[];
+  currentValue: TValue;
+  currentLabel: string;
+  actionLabel: string;
+}
+
+const selectTaskSettingFromList = async <TValue extends string>(
+  ctx: ExtensionCommandContext,
+  options: SelectTaskSettingFromListOptions<TValue>
+): Promise<TValue | null> => {
+  const items: SelectItem[] = options.options.map((option) => ({
     value: option.value,
     label: option.label,
     description:
-      option.value === task.status ? `${option.label} (current)` : `Set status to ${option.label}`,
+      option.value === options.currentValue
+        ? `${option.label} (current)`
+        : `Set ${options.actionLabel} to ${option.label}`,
   }));
 
-  return ctx.ui.custom<TaskStatus | null>((tui, theme, _keybindings, done) => {
+  return ctx.ui.custom<TValue | null>((tui, theme, _keybindings, done) => {
     const container = new Container();
     container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    container.addChild(new Text(theme.fg("accent", theme.bold(options.title)), 1, 0));
     container.addChild(
-      new Text(theme.fg("accent", theme.bold(`Update status · ${task.title}`)), 1, 0)
+      new Text(theme.fg("muted", `Current ${options.actionLabel}: ${options.currentLabel}`), 1, 0)
     );
 
     const selectList = new SelectList(items, items.length, {
@@ -435,7 +512,7 @@ const selectTaskStatusFromList = async (
       noMatch: (text) => theme.fg("warning", text),
     });
 
-    selectList.onSelect = (item) => done(item.value as TaskStatus);
+    selectList.onSelect = (item) => done(item.value as TValue);
     selectList.onCancel = () => done(null);
 
     container.addChild(selectList);
@@ -508,6 +585,7 @@ export {
   resolveRequestedTaskId,
   selectTaskDetailAction,
   selectTaskFromList,
+  selectTaskPriorityFromList,
   selectTaskStatusFromList,
   showEmptyTasksState,
   syncCurrentTaskIfFocused,
