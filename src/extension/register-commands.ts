@@ -3,6 +3,7 @@ import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Container, matchesKey, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 
 import type {
+  ProjectSummary,
   TaskDetail,
   TaskFilter,
   TaskId,
@@ -12,6 +13,7 @@ import type {
 } from "../domain/task";
 import { browseTasks } from "../flows/browse-tasks";
 import { commentOnTask } from "../flows/comment-on-task";
+import { createTask } from "../flows/create-task";
 import { showTaskDetail } from "../flows/show-task-detail";
 import { updateTask } from "../flows/update-task";
 import type { TaskService } from "../services/task-service";
@@ -52,10 +54,24 @@ interface ErrorTasksResult {
 
 type TaskBrowseLoadResult = LoadedTasksResult | CancelledTasksResult | ErrorTasksResult;
 
+type SelectTaskProjectResult =
+  | { status: "selected"; project: ProjectSummary }
+  | { status: "cancelled" }
+  | { status: "unavailable" };
+
 export interface RegisterCommandDependencies {
   getTaskService?: () => Promise<TaskService>;
   getCurrentTaskId?: () => TaskId | null;
   clearCurrentTask?: (ctx: ExtensionCommandContext) => Promise<void>;
+  promptTaskTitle?: (ctx: ExtensionCommandContext) => Promise<string | null>;
+  selectTaskProject?: (
+    ctx: ExtensionCommandContext,
+    taskService: TaskService
+  ) => Promise<SelectTaskProjectResult>;
+  editTaskDescription?: (
+    ctx: ExtensionCommandContext,
+    taskTitle: string
+  ) => Promise<string | undefined>;
   loadTasks?: (
     ctx: ExtensionCommandContext,
     taskService: TaskService
@@ -227,6 +243,126 @@ const createTaskClearCommandHandler = (
   };
 };
 
+const createTaskNewCommandHandler = (
+  dependencies: RegisterCommandDependencies = {}
+): ((args: string, ctx: ExtensionCommandContext) => Promise<void>) => {
+  const getTaskService =
+    dependencies.getTaskService ?? (() => getDefaultToduTaskServiceRuntime().ensureConnected());
+  const promptTaskTitle = dependencies.promptTaskTitle ?? promptRequiredTaskTitle;
+  const selectTaskProject = dependencies.selectTaskProject ?? selectProjectForTaskCreation;
+  const editTaskDescription = dependencies.editTaskDescription ?? editNewTaskDescription;
+  const setCurrentTask =
+    dependencies.setCurrentTask ??
+    ((ctx: ExtensionCommandContext, task: TaskDetail) =>
+      getDefaultCurrentTaskContextController().setCurrentTask(ctx, task));
+  const openTaskDetail =
+    dependencies.openTaskDetail ??
+    ((ctx: ExtensionCommandContext, taskService: TaskService, taskId: TaskId) =>
+      openTaskDetailHub(ctx, taskService, taskId, {
+        setCurrentTask,
+        showTaskDetailView: dependencies.showTaskDetailView,
+        selectTaskStatus: dependencies.selectTaskStatus,
+        selectTaskPriority: dependencies.selectTaskPriority,
+        editTaskComment: dependencies.editTaskComment,
+      }));
+
+  return async (_args: string, ctx: ExtensionCommandContext): Promise<void> => {
+    if (!ctx.hasUI) {
+      process.stderr.write("/task-new requires interactive mode\n");
+      return;
+    }
+
+    const title = await promptTaskTitle(ctx);
+    if (!title) {
+      ctx.ui.notify("Task creation cancelled", "info");
+      return;
+    }
+
+    let taskService: TaskService;
+    try {
+      taskService = await getTaskService();
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to start task creation"), "error");
+      return;
+    }
+
+    let projectSelection: SelectTaskProjectResult;
+    try {
+      projectSelection = await selectTaskProject(ctx, taskService);
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to load projects"), "error");
+      return;
+    }
+
+    if (projectSelection.status === "unavailable") {
+      ctx.ui.notify("No projects available for new tasks", "warning");
+      return;
+    }
+
+    if (projectSelection.status === "cancelled") {
+      ctx.ui.notify("Task creation cancelled", "info");
+      return;
+    }
+
+    let descriptionInput: string | undefined;
+    try {
+      descriptionInput = await editTaskDescription(ctx, title);
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to collect task description"), "error");
+      return;
+    }
+
+    if (descriptionInput === undefined) {
+      ctx.ui.notify("Task creation cancelled", "info");
+      return;
+    }
+
+    const description = normalizeOptionalTaskDescription(descriptionInput);
+
+    let createdTask: TaskDetail;
+    try {
+      createdTask = await createTask(
+        { taskService },
+        {
+          title,
+          projectId: projectSelection.project.id,
+          description,
+        }
+      );
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to create task"), "error");
+      return;
+    }
+
+    try {
+      await setCurrentTask(ctx, createdTask);
+    } catch (error) {
+      ctx.ui.notify(
+        formatTasksCommandError(
+          error,
+          `Created task ${createdTask.title} but failed to update current task context`
+        ),
+        "error"
+      );
+      return;
+    }
+
+    ctx.ui.notify(`Created task ${createdTask.title}`, "info");
+
+    try {
+      await openTaskDetail(ctx, taskService, createdTask.id);
+    } catch (error) {
+      ctx.ui.notify(
+        formatTasksCommandError(
+          error,
+          `Created task ${createdTask.title} but failed to open task detail`
+        ),
+        "error"
+      );
+    }
+  };
+};
+
 const registerCommands = (
   pi: ExtensionAPI,
   dependencies: RegisterCommandDependencies = {}
@@ -246,6 +382,11 @@ const registerCommands = (
   pi.registerCommand("task-clear", {
     description: "Clear the current task context",
     handler: createTaskClearCommandHandler(dependencies),
+  });
+
+  pi.registerCommand("task-new", {
+    description: "Create a new todu task",
+    handler: createTaskNewCommandHandler(dependencies),
   });
 };
 
@@ -342,6 +483,102 @@ const showEmptyTasksState = async (ctx: ExtensionCommandContext): Promise<void> 
       },
     };
   });
+};
+
+const promptRequiredTaskTitle = async (ctx: ExtensionCommandContext): Promise<string | null> => {
+  while (true) {
+    const title = await ctx.ui.input("New task title", "What needs to be done?");
+    if (title === undefined) {
+      return null;
+    }
+
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length > 0) {
+      return trimmedTitle;
+    }
+
+    ctx.ui.notify("Task title is required", "warning");
+  }
+};
+
+const selectProjectForTaskCreation = async (
+  ctx: ExtensionCommandContext,
+  taskService: TaskService
+): Promise<SelectTaskProjectResult> => {
+  const projects = [...(await taskService.listProjects())].sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+
+  if (projects.length === 0) {
+    return { status: "unavailable" };
+  }
+
+  const selectedProjectId = await selectProjectFromList(ctx, projects);
+  if (!selectedProjectId) {
+    return { status: "cancelled" };
+  }
+
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  if (!selectedProject) {
+    return { status: "cancelled" };
+  }
+
+  return {
+    status: "selected",
+    project: selectedProject,
+  };
+};
+
+const selectProjectFromList = async (
+  ctx: ExtensionCommandContext,
+  projects: ProjectSummary[]
+): Promise<string | null> => {
+  const items: SelectItem[] = projects.map((project) => ({
+    value: project.id,
+    label: project.name,
+    description: `${project.status} • ${project.priority} • ${project.id}`,
+  }));
+
+  return ctx.ui.custom<string | null>((tui, theme, _keybindings, done) => {
+    const container = new Container();
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    container.addChild(new Text(theme.fg("accent", theme.bold("Select Project")), 1, 0));
+    container.addChild(new Text(theme.fg("muted", "Choose the project for the new task."), 1, 0));
+
+    const selectList = new SelectList(items, Math.min(items.length, 10), {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+
+    selectList.onSelect = (item) => done(item.value as string);
+    selectList.onCancel = () => done(null);
+
+    container.addChild(selectList);
+    container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter select • esc cancel"), 1, 0));
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+    return {
+      render: (width: number) => container.render(width),
+      invalidate: () => container.invalidate(),
+      handleInput: (data: string) => {
+        selectList.handleInput(data);
+        tui.requestRender();
+      },
+    };
+  });
+};
+
+const editNewTaskDescription = async (
+  ctx: ExtensionCommandContext,
+  taskTitle: string
+): Promise<string | undefined> => ctx.ui.editor(`Description (optional) · ${taskTitle}`, "");
+
+const normalizeOptionalTaskDescription = (description: string): string | null => {
+  const trimmedDescription = description.trim();
+  return trimmedDescription.length > 0 ? trimmedDescription : null;
 };
 
 interface OpenTaskDetailDependencies {
@@ -631,6 +868,7 @@ const formatTasksCommandError = (error: unknown, prefix: string): string => {
 export {
   createTaskClearCommandHandler,
   createTaskCommandHandler,
+  createTaskNewCommandHandler,
   createTasksCommandHandler,
   DEFAULT_BROWSE_TASKS_FILTER,
   editTaskComment,
