@@ -2,14 +2,21 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Container, matchesKey, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 
-import type { TaskDetail, TaskFilter, TaskId, TaskSummary } from "../domain/task";
+import type { TaskDetail, TaskFilter, TaskId, TaskStatus, TaskSummary } from "../domain/task";
 import { browseTasks } from "../flows/browse-tasks";
+import { commentOnTask } from "../flows/comment-on-task";
 import { showTaskDetail } from "../flows/show-task-detail";
+import { updateTask } from "../flows/update-task";
 import type { TaskService } from "../services/task-service";
 import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-service";
-import { createTaskDetailViewModel } from "../ui/components/task-detail";
+import {
+  createTaskDetailActionItems,
+  createTaskDetailViewModel,
+  type TaskDetailActionKind,
+} from "../ui/components/task-detail";
 import { createTaskListItem } from "../ui/components/task-list";
 import { createTaskLoaderViewModel } from "../ui/components/loaders";
+import { taskStatusOptions } from "../ui/components/task-settings";
 import { getDefaultCurrentTaskContextController } from "./current-task-context";
 
 const DEFAULT_BROWSE_TASKS_FILTER: TaskFilter = {
@@ -34,6 +41,7 @@ type TaskBrowseLoadResult = LoadedTasksResult | CancelledTasksResult | ErrorTask
 
 export interface RegisterCommandDependencies {
   getTaskService?: () => Promise<TaskService>;
+  getCurrentTaskId?: () => TaskId | null;
   loadTasks?: (
     ctx: ExtensionCommandContext,
     taskService: TaskService
@@ -41,6 +49,12 @@ export interface RegisterCommandDependencies {
   selectTask?: (ctx: ExtensionCommandContext, tasks: TaskSummary[]) => Promise<TaskId | null>;
   showEmptyState?: (ctx: ExtensionCommandContext) => Promise<void>;
   setCurrentTask?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<void>;
+  showTaskDetailView?: (
+    ctx: ExtensionCommandContext,
+    task: TaskDetail
+  ) => Promise<TaskDetailActionKind | null>;
+  selectTaskStatus?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<TaskStatus | null>;
+  editTaskComment?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<string | null>;
   openTaskDetail?: (
     ctx: ExtensionCommandContext,
     taskService: TaskService,
@@ -63,7 +77,12 @@ const createTasksCommandHandler = (
   const openTaskDetail =
     dependencies.openTaskDetail ??
     ((ctx: ExtensionCommandContext, taskService: TaskService, taskId: TaskId) =>
-      openSelectedTaskDetail(ctx, taskService, taskId, setCurrentTask));
+      openSelectedTaskDetail(ctx, taskService, taskId, {
+        setCurrentTask,
+        showTaskDetailView: dependencies.showTaskDetailView,
+        selectTaskStatus: dependencies.selectTaskStatus,
+        editTaskComment: dependencies.editTaskComment,
+      }));
 
   return async (_args: string, ctx: ExtensionCommandContext): Promise<void> => {
     if (!ctx.hasUI) {
@@ -103,6 +122,49 @@ const createTasksCommandHandler = (
   };
 };
 
+const createTaskCommandHandler = (
+  dependencies: RegisterCommandDependencies = {}
+): ((args: string, ctx: ExtensionCommandContext) => Promise<void>) => {
+  const getTaskService =
+    dependencies.getTaskService ?? (() => getDefaultToduTaskServiceRuntime().ensureConnected());
+  const getCurrentTaskId =
+    dependencies.getCurrentTaskId ??
+    (() => getDefaultCurrentTaskContextController().getState().currentTaskId);
+  const setCurrentTask =
+    dependencies.setCurrentTask ??
+    ((ctx: ExtensionCommandContext, task: TaskDetail) =>
+      getDefaultCurrentTaskContextController().setCurrentTask(ctx, task));
+  const openTaskDetail =
+    dependencies.openTaskDetail ??
+    ((ctx: ExtensionCommandContext, taskService: TaskService, taskId: TaskId) =>
+      openTaskDetailHub(ctx, taskService, taskId, {
+        setCurrentTask,
+        showTaskDetailView: dependencies.showTaskDetailView,
+        selectTaskStatus: dependencies.selectTaskStatus,
+        editTaskComment: dependencies.editTaskComment,
+      }));
+
+  return async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
+    if (!ctx.hasUI) {
+      process.stderr.write("/task requires interactive mode\n");
+      return;
+    }
+
+    const requestedTaskId = resolveRequestedTaskId(args, getCurrentTaskId());
+    if (!requestedTaskId) {
+      ctx.ui.notify("No task selected. Run /tasks or pass a task ID.", "warning");
+      return;
+    }
+
+    try {
+      const taskService = await getTaskService();
+      await openTaskDetail(ctx, taskService, requestedTaskId);
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to open task detail"), "error");
+    }
+  };
+};
+
 const registerCommands = (
   pi: ExtensionAPI,
   dependencies: RegisterCommandDependencies = {}
@@ -112,6 +174,11 @@ const registerCommands = (
   pi.registerCommand("tasks", {
     description: "Browse active todu tasks",
     handler: createTasksCommandHandler(dependencies),
+  });
+
+  pi.registerCommand("task", {
+    description: "Show the current task or a specific task by ID",
+    handler: createTaskCommandHandler(dependencies),
   });
 };
 
@@ -210,11 +277,21 @@ const showEmptyTasksState = async (ctx: ExtensionCommandContext): Promise<void> 
   });
 };
 
+interface OpenTaskDetailDependencies {
+  setCurrentTask: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<void>;
+  showTaskDetailView?: (
+    ctx: ExtensionCommandContext,
+    task: TaskDetail
+  ) => Promise<TaskDetailActionKind | null>;
+  selectTaskStatus?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<TaskStatus | null>;
+  editTaskComment?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<string | null>;
+}
+
 const openSelectedTaskDetail = async (
   ctx: ExtensionCommandContext,
   taskService: TaskService,
   taskId: TaskId,
-  setCurrentTask: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<void>
+  dependencies: OpenTaskDetailDependencies
 ): Promise<void> => {
   const task = await showTaskDetail({ taskService }, taskId);
   if (!task) {
@@ -222,11 +299,192 @@ const openSelectedTaskDetail = async (
     return;
   }
 
-  await setCurrentTask(ctx, task);
+  await openTaskDetailHub(ctx, taskService, taskId, dependencies);
+};
 
+const openTaskDetailHub = async (
+  ctx: ExtensionCommandContext,
+  taskService: TaskService,
+  taskId: TaskId,
+  dependencies: OpenTaskDetailDependencies
+): Promise<void> => {
+  const showTaskDetailView = dependencies.showTaskDetailView ?? selectTaskDetailAction;
+  const selectStatus = dependencies.selectTaskStatus ?? selectTaskStatusFromList;
+  const editComment = dependencies.editTaskComment ?? editTaskComment;
+
+  while (true) {
+    const task = await showTaskDetail({ taskService }, taskId);
+    if (!task) {
+      ctx.ui.notify("Selected task no longer exists", "warning");
+      return;
+    }
+
+    const action = await showTaskDetailView(ctx, task);
+    if (!action) {
+      return;
+    }
+
+    if (action === "set-current") {
+      await dependencies.setCurrentTask(ctx, task);
+      ctx.ui.notify(`Current task set to ${task.title}`, "info");
+      continue;
+    }
+
+    if (action === "update-status") {
+      const nextStatus = await selectStatus(ctx, task);
+      if (!nextStatus || nextStatus === task.status) {
+        continue;
+      }
+
+      const updatedTask = await updateTask(
+        { taskService },
+        {
+          taskId: task.id,
+          status: nextStatus,
+        }
+      );
+      await syncCurrentTaskIfFocused(ctx, updatedTask, dependencies.setCurrentTask);
+      ctx.ui.notify(`Updated ${task.title} to ${nextStatus}`, "info");
+      continue;
+    }
+
+    const commentContent = await editComment(ctx, task);
+    if (!commentContent || commentContent.trim().length === 0) {
+      continue;
+    }
+
+    await commentOnTask(
+      { taskService },
+      {
+        taskId: task.id,
+        content: commentContent.trim(),
+      }
+    );
+
+    const refreshedTask = await showTaskDetail({ taskService }, task.id);
+    if (refreshedTask) {
+      await syncCurrentTaskIfFocused(ctx, refreshedTask, dependencies.setCurrentTask);
+    }
+    ctx.ui.notify(`Added comment to ${task.title}`, "info");
+  }
+};
+
+const selectTaskDetailAction = async (
+  ctx: ExtensionCommandContext,
+  task: TaskDetail
+): Promise<TaskDetailActionKind | null> => {
   const viewModel = createTaskDetailViewModel(task);
-  ctx.ui.setEditorText(viewModel.body);
-  ctx.ui.notify(`Loaded task detail for ${viewModel.title}`, "info");
+  const actionItems: SelectItem[] = createTaskDetailActionItems(task);
+
+  return ctx.ui.custom<TaskDetailActionKind | null>((tui, theme, _keybindings, done) => {
+    const container = new Container();
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    container.addChild(new Text(theme.fg("accent", theme.bold(viewModel.title)), 1, 0));
+    container.addChild(new Text(theme.fg("muted", viewModel.body), 1, 0));
+    container.addChild(new Text(theme.fg("accent", theme.bold("Quick actions")), 1, 0));
+
+    const selectList = new SelectList(actionItems, actionItems.length, {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+
+    selectList.onSelect = (item) => done(item.value as TaskDetailActionKind);
+    selectList.onCancel = () => done(null);
+
+    container.addChild(selectList);
+    container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter select • esc close"), 1, 0));
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+    return {
+      render: (width: number) => container.render(width),
+      invalidate: () => container.invalidate(),
+      handleInput: (data: string) => {
+        selectList.handleInput(data);
+        tui.requestRender();
+      },
+    };
+  });
+};
+
+const selectTaskStatusFromList = async (
+  ctx: ExtensionCommandContext,
+  task: TaskDetail
+): Promise<TaskStatus | null> => {
+  const items: SelectItem[] = taskStatusOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+    description:
+      option.value === task.status ? `${option.label} (current)` : `Set status to ${option.label}`,
+  }));
+
+  return ctx.ui.custom<TaskStatus | null>((tui, theme, _keybindings, done) => {
+    const container = new Container();
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    container.addChild(
+      new Text(theme.fg("accent", theme.bold(`Update status · ${task.title}`)), 1, 0)
+    );
+
+    const selectList = new SelectList(items, items.length, {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+
+    selectList.onSelect = (item) => done(item.value as TaskStatus);
+    selectList.onCancel = () => done(null);
+
+    container.addChild(selectList);
+    container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter select • esc cancel"), 1, 0));
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+    return {
+      render: (width: number) => container.render(width),
+      invalidate: () => container.invalidate(),
+      handleInput: (data: string) => {
+        selectList.handleInput(data);
+        tui.requestRender();
+      },
+    };
+  });
+};
+
+const editTaskComment = async (
+  ctx: ExtensionCommandContext,
+  task: TaskDetail
+): Promise<string | null> => {
+  const content = await ctx.ui.editor(`Add comment · ${task.title}`, "");
+  return content ?? null;
+};
+
+const syncCurrentTaskIfFocused = async (
+  ctx: ExtensionCommandContext,
+  task: TaskDetail,
+  setCurrentTask: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<void>
+): Promise<void> => {
+  const currentTaskId = getFocusedTaskId();
+  if (currentTaskId !== task.id) {
+    return;
+  }
+
+  await setCurrentTask(ctx, task);
+};
+
+const getFocusedTaskId = (): TaskId | null => {
+  try {
+    return getDefaultCurrentTaskContextController().getState().currentTaskId;
+  } catch {
+    return null;
+  }
+};
+
+const resolveRequestedTaskId = (args: string, currentTaskId: TaskId | null): TaskId | null => {
+  const trimmedArgs = args.trim();
+  return trimmedArgs.length > 0 ? trimmedArgs : currentTaskId;
 };
 
 const formatTasksCommandError = (error: unknown, prefix: string): string => {
@@ -238,12 +496,19 @@ const formatTasksCommandError = (error: unknown, prefix: string): string => {
 };
 
 export {
+  createTaskCommandHandler,
   createTasksCommandHandler,
   DEFAULT_BROWSE_TASKS_FILTER,
+  editTaskComment,
   formatTasksCommandError,
   loadActiveTasksWithLoader,
   openSelectedTaskDetail,
+  openTaskDetailHub,
   registerCommands,
+  resolveRequestedTaskId,
+  selectTaskDetailAction,
   selectTaskFromList,
+  selectTaskStatusFromList,
   showEmptyTasksState,
+  syncCurrentTaskIfFocused,
 };

@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { TaskDetail, TaskSummary } from "@/domain/task";
 import {
+  createTaskCommandHandler,
   createTasksCommandHandler,
   DEFAULT_BROWSE_TASKS_FILTER,
   openSelectedTaskDetail,
+  openTaskDetailHub,
   registerCommands,
+  resolveRequestedTaskId,
 } from "@/extension/register-commands";
 import type { TaskService } from "@/services/task-service";
 
@@ -19,10 +22,11 @@ const createTaskSummary = (): TaskSummary => ({
   labels: ["ui"],
 });
 
-const createTaskDetail = (): TaskDetail => ({
+const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   ...createTaskSummary(),
   description: "Build the first task browse flow",
   comments: [],
+  ...overrides,
 });
 
 const createCommandContext = () => ({
@@ -30,11 +34,13 @@ const createCommandContext = () => ({
   ui: {
     notify: vi.fn(),
     setEditorText: vi.fn(),
+    editor: vi.fn(),
+    custom: vi.fn(),
   },
 });
 
 describe("registerCommands", () => {
-  it("registers the /tasks command", () => {
+  it("registers the /tasks and /task commands", () => {
     const pi = {
       appendEntry: vi.fn(),
       registerCommand: vi.fn(),
@@ -46,6 +52,13 @@ describe("registerCommands", () => {
       "tasks",
       expect.objectContaining({
         description: "Browse active todu tasks",
+        handler: expect.any(Function),
+      })
+    );
+    expect(pi.registerCommand).toHaveBeenCalledWith(
+      "task",
+      expect.objectContaining({
+        description: "Show the current task or a specific task by ID",
         handler: expect.any(Function),
       })
     );
@@ -144,39 +157,141 @@ describe("createTasksCommandHandler", () => {
   });
 });
 
+describe("createTaskCommandHandler", () => {
+  it("uses the explicit task id when provided", async () => {
+    const context = createCommandContext();
+    const taskService = {} as TaskService;
+    const openTaskDetail = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      getCurrentTaskId: vi.fn().mockReturnValue("task-current"),
+      openTaskDetail,
+    });
+
+    await handler("task-123", context as never);
+
+    expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, "task-123");
+  });
+
+  it("falls back to the current task id when no explicit id is given", async () => {
+    const context = createCommandContext();
+    const taskService = {} as TaskService;
+    const openTaskDetail = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      getCurrentTaskId: vi.fn().mockReturnValue("task-current"),
+      openTaskDetail,
+    });
+
+    await handler("", context as never);
+
+    expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, "task-current");
+  });
+
+  it("warns when there is no explicit or current task id", async () => {
+    const context = createCommandContext();
+    const handler = createTaskCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+      getCurrentTaskId: vi.fn().mockReturnValue(null),
+    });
+
+    await handler("", context as never);
+
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      "No task selected. Run /tasks or pass a task ID.",
+      "warning"
+    );
+  });
+});
+
 describe("openSelectedTaskDetail", () => {
-  it("loads the task detail into the editor and sets the current task", async () => {
+  it("opens the detail hub without mutating current task context", async () => {
     const context = createCommandContext();
     const taskDetail = createTaskDetail();
     const setCurrentTask = vi.fn().mockResolvedValue(undefined);
     const taskService = {
       getTask: vi.fn().mockResolvedValue(taskDetail),
+      updateTask: vi.fn(),
+      addTaskComment: vi.fn(),
     } as unknown as TaskService;
 
-    await openSelectedTaskDetail(context as never, taskService, taskDetail.id, setCurrentTask);
+    await openSelectedTaskDetail(context as never, taskService, taskDetail.id, {
+      setCurrentTask,
+      showTaskDetailView: vi.fn().mockResolvedValue(null),
+    });
 
     expect(taskService.getTask).toHaveBeenCalledWith(taskDetail.id);
-    expect(setCurrentTask).toHaveBeenCalledWith(context, taskDetail);
-    expect(context.ui.setEditorText).toHaveBeenCalledWith(
-      "Implement /tasks\nBuild the first task browse flow"
-    );
-    expect(context.ui.notify).toHaveBeenCalledWith(
-      "Loaded task detail for Implement /tasks",
-      "info"
-    );
+    expect(setCurrentTask).not.toHaveBeenCalled();
   });
+});
 
-  it("warns when the selected task disappears", async () => {
+describe("openTaskDetailHub", () => {
+  it("updates task status from the detail hub", async () => {
     const context = createCommandContext();
-    const setCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const initialTask = createTaskDetail();
+    const updatedTask = createTaskDetail({ status: "done" });
     const taskService = {
-      getTask: vi.fn().mockResolvedValue(null),
+      getTask: vi.fn().mockResolvedValueOnce(initialTask).mockResolvedValueOnce(updatedTask),
+      updateTask: vi.fn().mockResolvedValue(updatedTask),
+      addTaskComment: vi.fn(),
     } as unknown as TaskService;
 
-    await openSelectedTaskDetail(context as never, taskService, "task-123", setCurrentTask);
+    await openTaskDetailHub(context as never, taskService, initialTask.id, {
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      showTaskDetailView: vi
+        .fn()
+        .mockResolvedValueOnce("update-status")
+        .mockResolvedValueOnce(null),
+      selectTaskStatus: vi.fn().mockResolvedValue("done"),
+    });
 
-    expect(context.ui.notify).toHaveBeenCalledWith("Selected task no longer exists", "warning");
-    expect(setCurrentTask).not.toHaveBeenCalled();
-    expect(context.ui.setEditorText).not.toHaveBeenCalled();
+    expect(taskService.updateTask).toHaveBeenCalledWith({
+      taskId: initialTask.id,
+      status: "done",
+    });
+    expect(context.ui.notify).toHaveBeenCalledWith(`Updated ${initialTask.title} to done`, "info");
+  });
+
+  it("adds a comment from the detail hub", async () => {
+    const context = createCommandContext();
+    const task = createTaskDetail();
+    const refreshedTask = createTaskDetail({
+      comments: [
+        {
+          id: "comment-1",
+          taskId: task.id,
+          content: "Looks good",
+          author: "user",
+          createdAt: "2026-03-19T00:00:00.000Z",
+        },
+      ],
+    });
+    const taskService = {
+      getTask: vi.fn().mockResolvedValueOnce(task).mockResolvedValueOnce(refreshedTask),
+      updateTask: vi.fn(),
+      addTaskComment: vi.fn().mockResolvedValue(refreshedTask.comments[0]),
+    } as unknown as TaskService;
+
+    await openTaskDetailHub(context as never, taskService, task.id, {
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      showTaskDetailView: vi.fn().mockResolvedValueOnce("comment").mockResolvedValueOnce(null),
+      editTaskComment: vi.fn().mockResolvedValue("Looks good"),
+    });
+
+    expect(taskService.addTaskComment).toHaveBeenCalledWith({
+      taskId: task.id,
+      content: "Looks good",
+    });
+    expect(context.ui.notify).toHaveBeenCalledWith(`Added comment to ${task.title}`, "info");
+  });
+});
+
+describe("resolveRequestedTaskId", () => {
+  it("prefers explicit args over current task id", () => {
+    expect(resolveRequestedTaskId("task-123", "task-current")).toBe("task-123");
+  });
+
+  it("falls back to current task id when args are empty", () => {
+    expect(resolveRequestedTaskId("   ", "task-current")).toBe("task-current");
   });
 });

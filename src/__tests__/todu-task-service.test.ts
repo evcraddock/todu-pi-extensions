@@ -87,7 +87,19 @@ describe("createToduTaskService", () => {
     });
     expect(createTaskDetailViewModel(hydratedDetail!)).toEqual({
       title: "Set up foundation",
-      body: "Set up foundation\nCreate the initial module layout",
+      body: [
+        "ID: task-123",
+        "Status: Active",
+        "Priority: high",
+        "Project: Foundation",
+        "Labels: foundation",
+        "",
+        "Description",
+        "Create the initial module layout",
+        "",
+        "Recent comments (0)",
+        "No comments yet",
+      ].join("\n"),
       commentCount: 0,
     });
   });
