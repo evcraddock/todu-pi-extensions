@@ -334,19 +334,6 @@ const createTaskNewCommandHandler = (
       return;
     }
 
-    try {
-      await setCurrentTask(ctx, createdTask);
-    } catch (error) {
-      ctx.ui.notify(
-        formatTasksCommandError(
-          error,
-          `Created task ${createdTask.title} but failed to update current task context`
-        ),
-        "error"
-      );
-      return;
-    }
-
     ctx.ui.notify(`Created task ${createdTask.title}`, "info");
 
     try {

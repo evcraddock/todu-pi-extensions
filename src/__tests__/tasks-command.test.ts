@@ -279,7 +279,7 @@ describe("createTaskNewCommandHandler", () => {
       projectId: project.id,
       description: null,
     });
-    expect(setCurrentTask).toHaveBeenCalledWith(context, createdTask);
+    expect(setCurrentTask).not.toHaveBeenCalled();
     expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, createdTask.id);
   });
 
@@ -326,7 +326,7 @@ describe("createTaskNewCommandHandler", () => {
     );
   });
 
-  it("creates the task, sets it current, and opens task detail", async () => {
+  it("creates the task and opens task detail without changing the current task", async () => {
     const context = createCommandContext();
     const project = createProjectSummary();
     const createdTask = createTaskDetail({
@@ -356,7 +356,7 @@ describe("createTaskNewCommandHandler", () => {
       projectId: project.id,
       description: "Draft the first version",
     });
-    expect(setCurrentTask).toHaveBeenCalledWith(context, createdTask);
+    expect(setCurrentTask).not.toHaveBeenCalled();
     expect(context.ui.notify).toHaveBeenCalledWith(`Created task ${createdTask.title}`, "info");
     expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, createdTask.id);
   });
