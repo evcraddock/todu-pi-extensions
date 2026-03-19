@@ -17,10 +17,40 @@ const createContext = () => ({
 });
 
 describe("createSyncStatusContextController", () => {
-  it("shows the initial unknown state and updates status from sync events", async () => {
+  it("fetches the initial sync status snapshot after attaching", async () => {
+    const request = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        local: { mode: "ephemeral-client" },
+        remote: { state: "connected", server: "ws://localhost:3030" },
+      },
+    });
+    const controller = createSyncStatusContextController(
+      { appendEntry: vi.fn() },
+      {
+        runtime: {
+          client: {
+            on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
+          },
+          connection: {
+            subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
+            connect: vi.fn().mockResolvedValue(undefined),
+            request,
+          },
+        } as never,
+      }
+    );
+    const ctx = createContext();
+
+    await controller.attach(ctx as never);
+
+    expect(request).toHaveBeenCalledWith("sync.status", {});
+    expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(SYNC_STATUS_KEY, "sync: connected");
+    expect(controller.getState()).toEqual({ syncStatus: "connected" });
+  });
+
+  it("updates status from sync.statusChanged payloads", async () => {
     let syncListener: unknown = null;
-    const subscribeToConnectionState = vi.fn().mockReturnValue({ unsubscribe: vi.fn() });
-    const connect = vi.fn().mockResolvedValue(undefined);
     const controller = createSyncStatusContextController(
       { appendEntry: vi.fn() },
       {
@@ -32,8 +62,15 @@ describe("createSyncStatusContextController", () => {
             }),
           },
           connection: {
-            subscribe: subscribeToConnectionState,
-            connect,
+            subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
+            connect: vi.fn().mockResolvedValue(undefined),
+            request: vi.fn().mockResolvedValue({
+              ok: true,
+              value: {
+                local: { mode: "ephemeral-client" },
+                remote: { state: "disconnected" },
+              },
+            }),
           },
         } as never,
       }
@@ -42,22 +79,40 @@ describe("createSyncStatusContextController", () => {
 
     await controller.attach(ctx as never);
 
-    expect(ctx.ui.setStatus).toHaveBeenCalledWith(SYNC_STATUS_KEY, "sync: unknown");
-    expect(connect).toHaveBeenCalledTimes(1);
-
-    const registeredSyncListener = syncListener;
-    if (typeof registeredSyncListener !== "function") {
+    if (typeof syncListener !== "function") {
       throw new Error("Expected sync listener to be registered");
     }
 
-    registeredSyncListener({ name: "sync.statusChanged", payload: { status: "running" } });
+    syncListener({
+      name: "sync.statusChanged",
+      payload: {
+        local: { mode: "ephemeral-client" },
+        remote: { state: "syncing" },
+      },
+    });
 
-    expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(SYNC_STATUS_KEY, "sync: running");
-    expect(controller.getState()).toEqual({ syncStatus: "running" });
+    expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(SYNC_STATUS_KEY, "sync: syncing");
+    expect(controller.getState()).toEqual({ syncStatus: "syncing" });
   });
 
-  it("resets to unknown when the daemon connection is not connected", async () => {
+  it("resets to unknown on disconnect and refreshes on reconnect", async () => {
     let connectionStateListener: unknown = null;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          local: { mode: "ephemeral-client" },
+          remote: { state: "connected" },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          local: { mode: "ephemeral-client" },
+          remote: { state: "connected" },
+        },
+      });
     const controller = createSyncStatusContextController(
       { appendEntry: vi.fn() },
       {
@@ -71,6 +126,7 @@ describe("createSyncStatusContextController", () => {
               return { unsubscribe: vi.fn() };
             }),
             connect: vi.fn().mockResolvedValue(undefined),
+            request,
           },
         } as never,
       }
@@ -79,43 +135,56 @@ describe("createSyncStatusContextController", () => {
 
     await controller.attach(ctx as never);
 
-    const registeredConnectionStateListener = connectionStateListener;
-    if (typeof registeredConnectionStateListener !== "function") {
+    if (typeof connectionStateListener !== "function") {
       throw new Error("Expected connection state listener to be registered");
     }
 
-    registeredConnectionStateListener({
+    connectionStateListener({
       status: "reconnecting",
       socketPath: "/tmp/todu.sock",
       handshake: null,
       lastError: null,
     });
-
     expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(SYNC_STATUS_KEY, "sync: unknown");
-    expect(controller.getState()).toEqual({ syncStatus: "unknown" });
+
+    connectionStateListener({
+      status: "connected",
+      socketPath: "/tmp/todu.sock",
+      handshake: null,
+      lastError: null,
+    });
+    await Promise.resolve();
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(SYNC_STATUS_KEY, "sync: connected");
   });
 });
 
 describe("sync status helpers", () => {
   it("extracts status values from supported payload shapes", () => {
-    expect(extractSyncStatus("running")).toBe("running");
-    expect(extractSyncStatus({ status: "idle" })).toBe("idle");
+    expect(extractSyncStatus("connected")).toBe("connected");
+    expect(extractSyncStatus({ remote: { state: "syncing" } })).toBe("syncing");
+    expect(extractSyncStatus({ status: "connected" })).toBe("connected");
     expect(extractSyncStatus({ state: "blocked" })).toBe("blocked");
     expect(extractSyncStatus({ binding: { state: "error" } })).toBe("error");
     expect(extractSyncStatus({ sync: { status: "running" } })).toBe("running");
-    expect(extractSyncStatus({ sync: { state: "idle" } })).toBe("idle");
     expect(extractSyncStatus({ nope: true })).toBeNull();
   });
 
   it("normalizes known and unknown sync states", () => {
-    expect(normalizeSyncStatus({ payload: { status: "RUNNING" } })).toBe("running");
-    expect(normalizeSyncStatus({ payload: { state: "paused" } })).toBe("custom:paused");
-    expect(normalizeSyncStatus({ payload: {} })).toBe("unknown");
+    expect(
+      normalizeSyncStatus({
+        local: { mode: "ephemeral-client" },
+        remote: { state: "CONNECTED" },
+      })
+    ).toBe("connected");
+    expect(normalizeSyncStatus({ remote: { state: "paused" } })).toBe("custom:paused");
+    expect(normalizeSyncStatus({})).toBe("unknown");
   });
 
   it("formats sync status values for the footer", () => {
     expect(formatSyncStatus("unknown")).toBe("sync: unknown");
-    expect(formatSyncStatus("running")).toBe("sync: running");
+    expect(formatSyncStatus("connected")).toBe("sync: connected");
     expect(formatSyncStatus("custom:paused")).toBe("sync: paused");
   });
 
