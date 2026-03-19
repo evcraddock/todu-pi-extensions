@@ -21,7 +21,7 @@
     ]
   },
   "scripts": {
-    "build": "echo 'No build step configured yet'",
+    "build": "tsc --project tsconfig.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
