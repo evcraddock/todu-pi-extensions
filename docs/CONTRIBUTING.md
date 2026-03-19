@@ -60,6 +60,8 @@ Reply with `approve` to proceed.
 
 The goal is simple: the human should be able to see what the agent intends to do and explicitly approve it before implementation starts.
 
+Once the human replies with `approve`, move the task status to `inprogress` before making implementation changes.
+
 ## Required workflow
 
 1. Work only within task scope.
@@ -67,9 +69,10 @@ The goal is simple: the human should be able to see what the agent intends to do
 3. Make the smallest change that satisfies the task.
 4. Follow [CODE_STANDARDS.md](CODE_STANDARDS.md).
 5. For implementation tasks, show the Work Summary above and get approval before starting.
-6. Do not add manual line breaks in markdown paragraphs.
-7. If blocked or requirements are ambiguous, stop and report `BLOCKED` with reason.
-8. Summarize changed files and verification results.
+6. After approval, move the task to `inprogress` before making implementation changes.
+7. Do not add manual line breaks in markdown paragraphs.
+8. If blocked or requirements are ambiguous, stop and report `BLOCKED` with reason.
+9. Summarize changed files and verification results.
 
 ## Branch and commits
 
