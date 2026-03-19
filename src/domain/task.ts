@@ -6,6 +6,14 @@ export type TaskStatus = "active" | "inprogress" | "waiting" | "done" | "cancell
 
 export type TaskPriority = "low" | "medium" | "high";
 
+export interface ProjectSummary {
+  id: ProjectId;
+  name: string;
+  status: "active" | "done" | "cancelled";
+  priority: TaskPriority;
+  description: string | null;
+}
+
 export interface TaskComment {
   id: TaskCommentId;
   taskId: TaskId;
@@ -20,6 +28,7 @@ export interface TaskSummary {
   status: TaskStatus;
   priority: TaskPriority;
   projectId: ProjectId | null;
+  projectName: string | null;
   labels: string[];
 }
 
