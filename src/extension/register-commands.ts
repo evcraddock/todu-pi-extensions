@@ -55,6 +55,7 @@ type TaskBrowseLoadResult = LoadedTasksResult | CancelledTasksResult | ErrorTask
 export interface RegisterCommandDependencies {
   getTaskService?: () => Promise<TaskService>;
   getCurrentTaskId?: () => TaskId | null;
+  clearCurrentTask?: (ctx: ExtensionCommandContext) => Promise<void>;
   loadTasks?: (
     ctx: ExtensionCommandContext,
     taskService: TaskService
@@ -184,6 +185,48 @@ const createTaskCommandHandler = (
   };
 };
 
+const createTaskClearCommandHandler = (
+  dependencies: RegisterCommandDependencies = {}
+): ((args: string, ctx: ExtensionCommandContext) => Promise<void>) => {
+  const getCurrentTaskId =
+    dependencies.getCurrentTaskId ??
+    (() => getDefaultCurrentTaskContextController().getState().currentTaskId);
+  const clearCurrentTask =
+    dependencies.clearCurrentTask ??
+    ((ctx: ExtensionCommandContext) =>
+      getDefaultCurrentTaskContextController().clearCurrentTask(ctx));
+
+  return async (_args: string, ctx: ExtensionCommandContext): Promise<void> => {
+    const currentTaskId = getCurrentTaskId();
+    if (!currentTaskId) {
+      if (ctx.hasUI) {
+        ctx.ui.notify("No current task to clear", "info");
+        return;
+      }
+
+      process.stdout.write("No current task to clear\n");
+      return;
+    }
+
+    try {
+      await clearCurrentTask(ctx);
+      if (ctx.hasUI) {
+        ctx.ui.notify("Cleared current task", "info");
+        return;
+      }
+
+      process.stdout.write("Cleared current task\n");
+    } catch (error) {
+      if (ctx.hasUI) {
+        ctx.ui.notify(formatTasksCommandError(error, "Failed to clear current task"), "error");
+        return;
+      }
+
+      process.stderr.write(`${formatTasksCommandError(error, "Failed to clear current task")}\n`);
+    }
+  };
+};
+
 const registerCommands = (
   pi: ExtensionAPI,
   dependencies: RegisterCommandDependencies = {}
@@ -198,6 +241,11 @@ const registerCommands = (
   pi.registerCommand("task", {
     description: "Show the current task or a specific task by ID",
     handler: createTaskCommandHandler(dependencies),
+  });
+
+  pi.registerCommand("task-clear", {
+    description: "Clear the current task context",
+    handler: createTaskClearCommandHandler(dependencies),
   });
 };
 
@@ -581,6 +629,7 @@ const formatTasksCommandError = (error: unknown, prefix: string): string => {
 };
 
 export {
+  createTaskClearCommandHandler,
   createTaskCommandHandler,
   createTasksCommandHandler,
   DEFAULT_BROWSE_TASKS_FILTER,

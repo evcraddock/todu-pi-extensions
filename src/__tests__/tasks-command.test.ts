@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { TaskDetail, TaskSummary } from "@/domain/task";
 import {
+  createTaskClearCommandHandler,
   createTaskCommandHandler,
   createTasksCommandHandler,
   DEFAULT_BROWSE_TASKS_FILTER,
@@ -40,7 +41,7 @@ const createCommandContext = () => ({
 });
 
 describe("registerCommands", () => {
-  it("registers the /tasks and /task commands", () => {
+  it("registers the /tasks, /task, and /task-clear commands", () => {
     const pi = {
       appendEntry: vi.fn(),
       registerCommand: vi.fn(),
@@ -59,6 +60,13 @@ describe("registerCommands", () => {
       "task",
       expect.objectContaining({
         description: "Show the current task or a specific task by ID",
+        handler: expect.any(Function),
+      })
+    );
+    expect(pi.registerCommand).toHaveBeenCalledWith(
+      "task-clear",
+      expect.objectContaining({
+        description: "Clear the current task context",
         handler: expect.any(Function),
       })
     );
@@ -201,6 +209,54 @@ describe("createTaskCommandHandler", () => {
       "No task selected. Run /tasks or pass a task ID.",
       "warning"
     );
+  });
+});
+
+describe("createTaskClearCommandHandler", () => {
+  it("clears the current task in interactive mode", async () => {
+    const context = createCommandContext();
+    const clearCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskClearCommandHandler({
+      getCurrentTaskId: vi.fn().mockReturnValue("task-current"),
+      clearCurrentTask,
+    });
+
+    await handler("", context as never);
+
+    expect(clearCurrentTask).toHaveBeenCalledWith(context);
+    expect(context.ui.notify).toHaveBeenCalledWith("Cleared current task", "info");
+  });
+
+  it("reports when there is no current task in interactive mode", async () => {
+    const context = createCommandContext();
+    const clearCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskClearCommandHandler({
+      getCurrentTaskId: vi.fn().mockReturnValue(null),
+      clearCurrentTask,
+    });
+
+    await handler("", context as never);
+
+    expect(clearCurrentTask).not.toHaveBeenCalled();
+    expect(context.ui.notify).toHaveBeenCalledWith("No current task to clear", "info");
+  });
+
+  it("prints a success message in non-interactive mode", async () => {
+    const context = createCommandContext();
+    context.hasUI = false;
+    const stdoutWrite = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const clearCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskClearCommandHandler({
+      getCurrentTaskId: vi.fn().mockReturnValue("task-current"),
+      clearCurrentTask,
+    });
+
+    await handler("", context as never);
+
+    expect(clearCurrentTask).toHaveBeenCalledWith(context);
+    expect(stdoutWrite).toHaveBeenCalledWith("Cleared current task\n");
+
+    stdoutWrite.mockRestore();
   });
 });
 
