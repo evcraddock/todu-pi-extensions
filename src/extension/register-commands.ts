@@ -58,7 +58,7 @@ const createTasksCommandHandler = (
 
   return async (_args: string, ctx: ExtensionCommandContext): Promise<void> => {
     if (!ctx.hasUI) {
-      ctx.ui.notify("/tasks requires interactive mode", "error");
+      process.stderr.write("/tasks requires interactive mode\n");
       return;
     }
 

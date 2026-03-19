@@ -52,14 +52,18 @@ describe("registerCommands", () => {
 });
 
 describe("createTasksCommandHandler", () => {
-  it("requires interactive mode", async () => {
+  it("requires interactive mode without calling UI APIs", async () => {
     const context = createCommandContext();
     context.hasUI = false;
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     const handler = createTasksCommandHandler();
 
     await handler("", context as never);
 
-    expect(context.ui.notify).toHaveBeenCalledWith("/tasks requires interactive mode", "error");
+    expect(stderrWrite).toHaveBeenCalledWith("/tasks requires interactive mode\n");
+    expect(context.ui.notify).not.toHaveBeenCalled();
+
+    stderrWrite.mockRestore();
   });
 
   it("shows the empty state when there are no active tasks", async () => {
