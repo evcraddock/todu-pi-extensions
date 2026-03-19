@@ -47,6 +47,12 @@ Use `make dev` only after the dev environment task is completed.
 
 Read the Makefile before starting work.
 
+## CI Policy
+
+- Keep the default CI pipeline limited to build, lint, typecheck, and unit tests.
+- Do not add integration tests to the default branch-push or pull-request CI workflow unless the user explicitly asks for that change.
+- Integration tests should run through a separate opt-in workflow, script, or local/dev command when they are introduced.
+
 ## Pi-Specific Guidance
 
 - Follow pi extension, TUI, SDK, and package docs before introducing new patterns
