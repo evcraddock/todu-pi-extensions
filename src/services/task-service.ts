@@ -7,7 +7,7 @@ import type {
   TaskPriority,
   TaskStatus,
   TaskSummary,
-} from "@/domain/task";
+} from "../domain/task";
 
 export interface CreateTaskInput {
   title: string;

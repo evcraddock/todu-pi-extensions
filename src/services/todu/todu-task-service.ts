@@ -1,6 +1,6 @@
-import type { TaskDetail, TaskFilter, TaskSummary } from "@/domain/task";
-import type { TaskService } from "@/services/task-service";
-import { ToduDaemonClientError, type ToduDaemonClient } from "@/services/todu/daemon-client";
+import type { TaskDetail, TaskFilter, TaskSummary } from "../../domain/task";
+import type { TaskService } from "../task-service";
+import { ToduDaemonClientError, type ToduDaemonClient } from "./daemon-client";
 
 export class ToduTaskServiceError extends Error {
   readonly operation: string;

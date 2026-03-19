@@ -4,14 +4,14 @@ import {
   resolveToduDaemonConfig,
   type ResolveToduDaemonConfigOptions,
   type ToduDaemonConfig,
-} from "@/services/todu/daemon-config";
+} from "./daemon-config";
 import {
   TODU_DAEMON_EVENT_NAMES,
   type ToduDaemonEvent,
   type ToduDaemonEventListener,
   type ToduDaemonEventName,
   type ToduDaemonSubscription,
-} from "@/services/todu/daemon-events";
+} from "./daemon-events";
 
 export const TODU_DAEMON_PROTOCOL_VERSION = "1";
 export const DEFAULT_TODU_DAEMON_CONNECT_TIMEOUT_MS = 1_000;

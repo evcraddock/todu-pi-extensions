@@ -1,5 +1,5 @@
-import type { TaskComment } from "@/domain/task";
-import type { AddTaskCommentInput, TaskService } from "@/services/task-service";
+import type { TaskComment } from "../domain/task";
+import type { AddTaskCommentInput, TaskService } from "../services/task-service";
 
 export interface CommentOnTaskDependencies {
   taskService: TaskService;

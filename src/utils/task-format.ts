@@ -1,4 +1,4 @@
-import type { TaskDetail, TaskSummary } from "@/domain/task";
+import type { TaskDetail, TaskSummary } from "../domain/task";
 
 const formatTaskSummary = (task: TaskSummary): string =>
   [task.status, task.priority, task.projectName ?? task.projectId ?? "no-project"].join(" • ");

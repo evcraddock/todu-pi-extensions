@@ -1,4 +1,4 @@
-import type { TaskSummary } from "@/domain/task";
+import type { TaskSummary } from "../../domain/task";
 
 export interface NextActionsWidgetViewModel {
   title: string;

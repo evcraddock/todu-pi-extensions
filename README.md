@@ -62,8 +62,8 @@ make dev-cli CMD="task list"
 ### View Logs
 
 ```bash
-make dev-logs
-make dev-tail
+make dev-logs   # attach to the overmind session
+make dev-tail   # show a non-blocking recent log tail
 ```
 
 ### Stop the Dev Environment

@@ -1,5 +1,5 @@
-import type { TaskFilter, TaskSummary } from "@/domain/task";
-import type { TaskService } from "@/services/task-service";
+import type { TaskFilter, TaskSummary } from "../domain/task";
+import type { TaskService } from "../services/task-service";
 
 export interface BrowseTasksDependencies {
   taskService: TaskService;

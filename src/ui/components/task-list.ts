@@ -1,5 +1,5 @@
-import type { TaskId, TaskSummary } from "@/domain/task";
-import { formatTaskSummary } from "@/utils/task-format";
+import type { TaskId, TaskSummary } from "../../domain/task";
+import { formatTaskSummary } from "../../utils/task-format";
 
 export interface TaskListItem {
   value: TaskId;

@@ -1,4 +1,4 @@
-import type { TaskFilter } from "@/domain/task";
+import type { TaskFilter } from "../domain/task";
 
 const mergeTaskFilter = (baseFilter: TaskFilter, overrideFilter: TaskFilter = {}): TaskFilter => ({
   ...baseFilter,
