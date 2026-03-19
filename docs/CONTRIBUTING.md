@@ -2,15 +2,74 @@
 
 This document defines how to work in this project.
 
+## Task start disclosure and approval
+
+Before implementation begins on a task, disclose the plan and get approval.
+
+Do not start implementation on an undisclosed plan.
+
+Use this template and keep it concise:
+
+```md
+## Work Summary
+
+- Task: #<id> — <title>
+- Objective: <one sentence goal>
+- In scope:
+  - <scope item>
+- Out of scope:
+  - <out-of-scope item>
+
+### Acceptance criteria
+
+- [ ] <criterion copied from task>
+- [ ] <criterion copied from task>
+
+### Files to read
+
+- `<path>`
+- `<path>`
+
+### Files likely to change
+
+- `<path>`
+- `<path>`
+
+If the exact file list is not known yet, say so explicitly and keep the eventual changes scoped.
+
+### Implementation steps
+
+1. <step>
+2. <step>
+3. <step>
+
+### Verification plan
+
+- `<command>`
+- `<command>`
+
+### Open questions / risks
+
+- <item>
+- or `None`
+
+### Approval
+
+Reply with `approve` to proceed.
+```
+
+The goal is simple: the human should be able to see what the agent intends to do and explicitly approve it before implementation starts.
+
 ## Required workflow
 
 1. Work only within task scope.
 2. Read relevant files before editing.
 3. Make the smallest change that satisfies the task.
 4. Follow [CODE_STANDARDS.md](CODE_STANDARDS.md).
-5. Do not add manual line breaks in markdown paragraphs.
-6. If blocked or requirements are ambiguous, stop and report `BLOCKED` with reason.
-7. Summarize changed files and verification results.
+5. For implementation tasks, show the Work Summary above and get approval before starting.
+6. Do not add manual line breaks in markdown paragraphs.
+7. If blocked or requirements are ambiguous, stop and report `BLOCKED` with reason.
+8. Summarize changed files and verification results.
 
 ## Branch and commits
 
