@@ -64,6 +64,8 @@ make pre-pr
 
 - Push your branch to GitHub.
 - Use pull requests for review and integration whenever possible.
+- Run the `pr-review` skill before merge.
+- Start `pr-review` through the `tmux` skill as a sub-agent in a visible tmux session so the review run is observable.
 - Wait for explicit human merge approval.
 - Never auto-merge.
 

@@ -4,8 +4,11 @@ export type ToduDaemonEventName = (typeof TODU_DAEMON_EVENT_NAMES)[number];
 
 export interface ToduDaemonEvent {
   name: ToduDaemonEventName;
-  payload?: Record<string, unknown>;
+  payload: unknown;
+  ts?: string;
 }
+
+export type ToduDaemonEventListener = (event: ToduDaemonEvent) => void;
 
 export interface ToduDaemonSubscription {
   unsubscribe(): void;
