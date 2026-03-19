@@ -157,6 +157,7 @@ This expansion should stay aligned with the repository architecture:
 - local repo context should be gathered only for tools that genuinely need it, such as `project-check`
 - schedule parsing helpers should be deterministic and testable if added
 - later tools should continue the V1 policy of staying mostly UI-neutral unless there is a strong reason to introduce UI-aware side effects
+- later waves should preserve the V1 contract style where possible: domain-first naming, explicit parameter shapes, and stable structured `details`
 
 ### Testing approach
 

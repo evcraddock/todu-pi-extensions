@@ -79,6 +79,108 @@ The V1 tools should work in both interactive and non-interactive pi modes becaus
 
 ## Technical approach
 
+### V1 contract decisions
+
+#### Tool registration conventions
+
+- keep business logic out of `src/extension/register-tools.ts`
+- register V1 tools from small named modules under `src/tools/`
+- use `pi.registerTool()` with documented pi extension patterns only
+- use `Type.Object(...)` for parameter objects and `StringEnum(...)` for string enums
+- keep one tool per core operation rather than one mega-tool with an action enum
+
+#### Parameter contract
+
+Use repository-style field names that match the current service layer rather than generic Electron-style `id` fields where a domain-specific name is clearer.
+
+Planned V1 parameters:
+
+- `task_list`
+  - `statuses?: TaskStatus[]`
+  - `priorities?: TaskPriority[]`
+  - `projectId?: string | null`
+  - `query?: string`
+- `task_show`
+  - `taskId: TaskId`
+- `task_create`
+  - `title: string`
+  - `projectId: string`
+  - `description?: string`
+- `task_update`
+  - `taskId: TaskId`
+  - `status?: TaskStatus`
+  - `priority?: TaskPriority`
+  - `description?: string`
+- `task_comment_create`
+  - `taskId: TaskId`
+  - `content: string`
+- `project_list`
+  - no filter parameters in V1
+
+Deferred from V1 even if other clients support them:
+
+- task labels on `task_create`
+- title changes, due dates, scheduled dates, and label updates on `task_update`
+- all delete, move, integration, habit, and recurring operations
+
+#### Result and `details` contract
+
+All V1 tools should:
+
+- return concise human-readable text in `content`
+- return structured `details` objects intended for rendering and future state reconstruction
+- avoid returning raw backend payload dumps as the primary user-facing text
+
+Recommended `details` shapes:
+
+- `task_list`
+  - `{ kind: "task_list", filter, tasks, total, empty }`
+- `task_show`
+  - `{ kind: "task_show", taskId, found, task? }`
+- `task_create`
+  - `{ kind: "task_create", input, task }`
+- `task_update`
+  - `{ kind: "task_update", input, task }`
+- `task_comment_create`
+  - `{ kind: "task_comment_create", taskId, comment }`
+- `project_list`
+  - `{ kind: "project_list", projects, total, empty }`
+
+The exact TypeScript interfaces can be defined during implementation, but the shape should stay stable enough that renderers and tests do not have to infer intent from plain text.
+
+#### Error contract
+
+V1 should use pi's normal tool failure semantics:
+
+- throw errors for validation, service, and backend failures so the tool result is marked as an error
+- use contextual error messages that include the operation name
+- treat empty lists as successful non-error results
+- treat `task_show` not-found as a successful, explicit not-found result rather than a thrown error
+
+#### `promptSnippet` and `promptGuidelines` conventions
+
+Initial V1 policy:
+
+- provide a short `promptSnippet` for every V1 tool so the default system prompt exposes the tool surface clearly
+- use `promptGuidelines` sparingly and only for rules that reduce misuse
+- keep shared guidance consistent across tools instead of writing a different policy voice for each one
+
+The initial guideline set should reinforce that:
+
+- tools are for backend operations, not interactive browsing flows
+- slash commands remain the right choice for rich TUI navigation and editing
+- `task_update` supports only status, priority, and description in V1
+- `task_create` requires explicit `projectId`
+
+#### UI-neutrality contract
+
+V1 tools should stay mostly UI-neutral:
+
+- do not call `ctx.ui.input()`, `ctx.ui.editor()`, or `ctx.ui.custom()` inside tools
+- do not change current-task context or other session-backed UI state
+- do not switch views or send follow-up slash commands as a side effect
+- optional `renderCall` and `renderResult` functions are allowed because they only affect presentation
+
 ### Affected areas
 
 Likely files and modules:
@@ -134,7 +236,7 @@ Recommended V1 behavior per tool:
   - returns project summaries
   - starts unfiltered in V1
 
-The tool layer should not mirror the old skills' CLI recipes. It should call the extension's service abstractions directly.
+The tool layer should not mirror the old skills' CLI recipes. It should call the extension's service abstractions directly and use the shared V1 contract decisions above as the default implementation shape.
 
 ### Prompting and rendering
 

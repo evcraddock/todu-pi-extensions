@@ -90,7 +90,7 @@ The current `todu-skills` package breaks down into these likely buckets.
 - `task-comment-create`
 - `project-list`
 
-These align best with the current extension architecture and existing `TaskService` capabilities.
+These align best with the current extension architecture and existing `TaskService` capabilities. They should follow the explicit V1 contract captured in `docs/plans/agent-tools-v1.md`, including domain-first naming, UI-neutral behavior, and stable structured `details` payloads.
 
 #### Wave 2: task/project parity candidates after service expansion
 
