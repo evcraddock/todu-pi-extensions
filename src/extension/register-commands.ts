@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Container, matchesKey, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 
-import type { TaskFilter, TaskId, TaskSummary } from "../domain/task";
+import type { TaskDetail, TaskFilter, TaskId, TaskSummary } from "../domain/task";
 import { browseTasks } from "../flows/browse-tasks";
 import { showTaskDetail } from "../flows/show-task-detail";
 import type { TaskService } from "../services/task-service";
@@ -10,6 +10,7 @@ import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-
 import { createTaskDetailViewModel } from "../ui/components/task-detail";
 import { createTaskListItem } from "../ui/components/task-list";
 import { createTaskLoaderViewModel } from "../ui/components/loaders";
+import { getDefaultCurrentTaskContextController } from "./current-task-context";
 
 const DEFAULT_BROWSE_TASKS_FILTER: TaskFilter = {
   statuses: ["active"],
@@ -39,6 +40,7 @@ export interface RegisterCommandDependencies {
   ) => Promise<TaskBrowseLoadResult>;
   selectTask?: (ctx: ExtensionCommandContext, tasks: TaskSummary[]) => Promise<TaskId | null>;
   showEmptyState?: (ctx: ExtensionCommandContext) => Promise<void>;
+  setCurrentTask?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<void>;
   openTaskDetail?: (
     ctx: ExtensionCommandContext,
     taskService: TaskService,
@@ -54,7 +56,14 @@ const createTasksCommandHandler = (
   const loadTasks = dependencies.loadTasks ?? loadActiveTasksWithLoader;
   const selectTask = dependencies.selectTask ?? selectTaskFromList;
   const showEmptyState = dependencies.showEmptyState ?? showEmptyTasksState;
-  const openTaskDetail = dependencies.openTaskDetail ?? openSelectedTaskDetail;
+  const setCurrentTask =
+    dependencies.setCurrentTask ??
+    ((ctx: ExtensionCommandContext, task: TaskDetail) =>
+      getDefaultCurrentTaskContextController().setCurrentTask(ctx, task));
+  const openTaskDetail =
+    dependencies.openTaskDetail ??
+    ((ctx: ExtensionCommandContext, taskService: TaskService, taskId: TaskId) =>
+      openSelectedTaskDetail(ctx, taskService, taskId, setCurrentTask));
 
   return async (_args: string, ctx: ExtensionCommandContext): Promise<void> => {
     if (!ctx.hasUI) {
@@ -98,6 +107,8 @@ const registerCommands = (
   pi: ExtensionAPI,
   dependencies: RegisterCommandDependencies = {}
 ): void => {
+  getDefaultCurrentTaskContextController(pi);
+
   pi.registerCommand("tasks", {
     description: "Browse active todu tasks",
     handler: createTasksCommandHandler(dependencies),
@@ -202,13 +213,16 @@ const showEmptyTasksState = async (ctx: ExtensionCommandContext): Promise<void> 
 const openSelectedTaskDetail = async (
   ctx: ExtensionCommandContext,
   taskService: TaskService,
-  taskId: TaskId
+  taskId: TaskId,
+  setCurrentTask: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<void>
 ): Promise<void> => {
   const task = await showTaskDetail({ taskService }, taskId);
   if (!task) {
     ctx.ui.notify("Selected task no longer exists", "warning");
     return;
   }
+
+  await setCurrentTask(ctx, task);
 
   const viewModel = createTaskDetailViewModel(task);
   ctx.ui.setEditorText(viewModel.body);

@@ -36,6 +36,7 @@ const createCommandContext = () => ({
 describe("registerCommands", () => {
   it("registers the /tasks command", () => {
     const pi = {
+      appendEntry: vi.fn(),
       registerCommand: vi.fn(),
     };
 
@@ -144,16 +145,18 @@ describe("createTasksCommandHandler", () => {
 });
 
 describe("openSelectedTaskDetail", () => {
-  it("loads the task detail into the editor", async () => {
+  it("loads the task detail into the editor and sets the current task", async () => {
     const context = createCommandContext();
     const taskDetail = createTaskDetail();
+    const setCurrentTask = vi.fn().mockResolvedValue(undefined);
     const taskService = {
       getTask: vi.fn().mockResolvedValue(taskDetail),
     } as unknown as TaskService;
 
-    await openSelectedTaskDetail(context as never, taskService, taskDetail.id);
+    await openSelectedTaskDetail(context as never, taskService, taskDetail.id, setCurrentTask);
 
     expect(taskService.getTask).toHaveBeenCalledWith(taskDetail.id);
+    expect(setCurrentTask).toHaveBeenCalledWith(context, taskDetail);
     expect(context.ui.setEditorText).toHaveBeenCalledWith(
       "Implement /tasks\nBuild the first task browse flow"
     );
@@ -165,13 +168,15 @@ describe("openSelectedTaskDetail", () => {
 
   it("warns when the selected task disappears", async () => {
     const context = createCommandContext();
+    const setCurrentTask = vi.fn().mockResolvedValue(undefined);
     const taskService = {
       getTask: vi.fn().mockResolvedValue(null),
     } as unknown as TaskService;
 
-    await openSelectedTaskDetail(context as never, taskService, "task-123");
+    await openSelectedTaskDetail(context as never, taskService, "task-123", setCurrentTask);
 
     expect(context.ui.notify).toHaveBeenCalledWith("Selected task no longer exists", "warning");
+    expect(setCurrentTask).not.toHaveBeenCalled();
     expect(context.ui.setEditorText).not.toHaveBeenCalled();
   });
 });
