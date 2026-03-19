@@ -299,7 +299,6 @@ const openSelectedTaskDetail = async (
     return;
   }
 
-  await dependencies.setCurrentTask(ctx, task);
   await openTaskDetailHub(ctx, taskService, taskId, dependencies);
 };
 

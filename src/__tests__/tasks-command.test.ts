@@ -205,7 +205,7 @@ describe("createTaskCommandHandler", () => {
 });
 
 describe("openSelectedTaskDetail", () => {
-  it("sets the current task and opens the detail hub", async () => {
+  it("opens the detail hub without mutating current task context", async () => {
     const context = createCommandContext();
     const taskDetail = createTaskDetail();
     const setCurrentTask = vi.fn().mockResolvedValue(undefined);
@@ -221,7 +221,7 @@ describe("openSelectedTaskDetail", () => {
     });
 
     expect(taskService.getTask).toHaveBeenCalledWith(taskDetail.id);
-    expect(setCurrentTask).toHaveBeenCalledWith(context, taskDetail);
+    expect(setCurrentTask).not.toHaveBeenCalled();
   });
 });
 
