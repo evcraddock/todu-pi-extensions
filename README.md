@@ -1,117 +1,80 @@
 # todu-pi-extensions
 
-Task manager extensions for the pi agent harness that create UI for handling tasks.
+`todu-pi-extensions` is a pi package that adds todu-focused commands, tools, and TUI workflows to [pi](https://pi.dev). It is the pi-side integration layer for working with tasks from [todu](https://github.com/evcraddock/todu) without leaving the agent.
 
-## Status
+Today the package is focused on task browsing, task detail, task creation, and task updates inside pi.
 
-This repository is currently initialized with project scaffolding only. It does not yet implement the task UI extension behavior.
+## How it fits together
 
-The initial architecture design is documented in [`docs/architecture.md`](docs/architecture.md).
+- [pi](https://pi.dev) is the host coding agent and extension runtime.
+- [todu](https://github.com/evcraddock/todu) is the task backend and CLI.
+- `todu-pi-extensions` connects pi to todu.
+- [todu-workflow](https://github.com/evcraddock/todu-workflow) is an optional companion project with higher-level workflow skills and policies.
 
-## Goals
-
-- build pi extensions focused on task-management workflows
-- provide TUI components and interactions for handling tasks inside pi
-- package the extensions so they can be loaded locally or installed as a pi package later
+`todu-workflow` is not a hard dependency. You can use this package by itself, use it alongside `todu-workflow`, or build your own workflow on top of pi and todu.
 
 ## Prerequisites
 
+Install these first:
+
+- [pi via pi.dev](https://pi.dev)
+- [todu via github.com/evcraddock/todu](https://github.com/evcraddock/todu)
 - Node.js 20+
 - npm
-- [pi](https://github.com/badlogic/pi-mono) installed locally for manual extension testing
 - [overmind](https://github.com/DarthSim/overmind) for the local dev environment
-- [`todu`](https://github.com/evcraddock/todu) CLI installed locally to run the isolated dev daemon
 
-## Installation
+## Install the extension
+
+Install from git:
+
+```bash
+pi install git:github.com/evcraddock/todu-pi-extensions
+```
+
+Install project-local instead of globally:
+
+```bash
+pi install -l git:github.com/evcraddock/todu-pi-extensions
+```
+
+Install from a local checkout while developing:
+
+```bash
+pi install /path/to/todu-pi-extensions
+```
+
+After installation, reload pi if it is already running.
+
+## Basic usage
+
+Use the extension inside pi with commands such as:
+
+- `/tasks` to browse and filter tasks
+- `/task` to inspect the current task or a task by ID
+- `/task-new` to create a task
+- `/task-clear` to clear the current task context
+
+The package also exposes agent tools for structured task operations such as listing tasks, showing task details, and creating or updating tasks.
+
+## Work on this project
 
 ```bash
 npm install
-cp .env.example .env
-```
-
-The `.env` file is optional. It currently exists for local development overrides such as daemon log level.
-
-## How to Work on This Project
-
-### Start the Dev Environment
-
-```bash
 make dev
 ```
 
-This starts an isolated local todu daemon and a TypeScript watch process via overmind.
+`make dev` starts the local dev environment, including the isolated todu daemon used by this repository.
 
-On first run, `make dev` copies `config/dev.todu.yaml.template` to `config/dev.todu.yaml` automatically.
-
-The dev daemon uses a project-local data directory at `.dev/todu/data/`, so it does not touch your normal `~/.config/todu` state.
-
-### Check Dev Daemon Status
-
-```bash
-make dev-status
-make dev-daemon-status
-```
-
-### Run todu Commands Against the Isolated Dev Daemon
-
-```bash
-make dev-cli CMD="project list"
-make dev-cli CMD="task list"
-```
-
-### View Logs
-
-```bash
-make dev-logs   # attach to the overmind session
-make dev-tail   # show a non-blocking recent log tail
-```
-
-### Stop the Dev Environment
-
-```bash
-make dev-stop
-```
-
-### Run Tests and Linting
+Useful commands:
 
 ```bash
 make check
-```
-
-### Before Opening a PR
-
-```bash
 make pre-pr
-```
-
-### Available Make Commands
-
-```bash
+make dev-cli CMD="task list"
 make help
 ```
 
-## Follow-up Tasks
-
-- `task-99585d8f` — `Design todu-pi-extensions architecture`
-- `task-3d758b6a` — `Set up dev environment`
-
-## Dev Environment Setup
-
-The project uses an isolated local todu daemon for development. The writable dev config lives at `config/dev.todu.yaml` and is created from `config/dev.todu.yaml.template` on first `make dev`.
-
-The local daemon stores state under `.dev/todu/data/`, which is gitignored.
-
-Manual pi extension testing is still a separate step. This task sets up the backend/client-side dev environment and local feedback loop, not a full automated pi runtime.
-
-## Project Layout
-
-```text
-config/               Local dev daemon config template
-src/                  Extension entrypoint and future task UI code
-docs/                 Project workflow, coding standards, and architecture design
-scripts/pre-pr.sh     Local verification script
-.dev/                 Gitignored local daemon state created by make dev
-```
+The isolated dev daemon keeps its state under `.dev/` so local development does not touch your normal todu data.
 
 ## License
 
