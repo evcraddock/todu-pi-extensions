@@ -79,8 +79,22 @@ describe("normalizeCreateTaskInput", () => {
 describe("normalizeUpdateTaskInput", () => {
   it("requires at least one supported mutation field", () => {
     expect(() => normalizeUpdateTaskInput({ taskId: "task-123" })).toThrow(
-      "task_update requires at least one supported field: status, priority, or description"
+      "task_update requires at least one supported field: title, status, priority, or description"
     );
+  });
+
+  it("trims replacement titles", () => {
+    expect(
+      normalizeUpdateTaskInput({
+        taskId: " task-123 ",
+        title: "  Updated title  ",
+      })
+    ).toEqual({
+      taskId: "task-123",
+      title: "Updated title",
+      status: undefined,
+      priority: undefined,
+    });
   });
 
   it("treats blank descriptions as an explicit clear", () => {
@@ -183,7 +197,12 @@ describe("createTaskCreateToolDefinition", () => {
 
 describe("createTaskUpdateToolDefinition", () => {
   it("updates supported fields and returns structured details", async () => {
-    const task = createTaskDetail({ status: "inprogress", priority: "medium", description: null });
+    const task = createTaskDetail({
+      title: "Updated task title",
+      status: "inprogress",
+      priority: "medium",
+      description: null,
+    });
     const taskService = {
       updateTask: vi.fn().mockResolvedValue(task),
     } as unknown as TaskService;
@@ -193,6 +212,7 @@ describe("createTaskUpdateToolDefinition", () => {
 
     const result = await tool.execute("tool-call-1", {
       taskId: " task-123 ",
+      title: "  Updated task title  ",
       status: "inprogress",
       priority: "medium",
       description: "   ",
@@ -200,18 +220,20 @@ describe("createTaskUpdateToolDefinition", () => {
 
     expect(taskService.updateTask).toHaveBeenCalledWith({
       taskId: "task-123",
+      title: "Updated task title",
       status: "inprogress",
       priority: "medium",
       description: null,
     });
     expect(result.content[0]?.text).toContain(`Updated task ${task.id}: ${task.title}`);
     expect(result.content[0]?.text).toContain(
-      "Changes: status=inprogress, priority=medium, description=cleared"
+      'Changes: title="Updated task title", status=inprogress, priority=medium, description=cleared'
     );
     expect(result.details).toEqual({
       kind: "task_update",
       input: {
         taskId: "task-123",
+        title: "Updated task title",
         status: "inprogress",
         priority: "medium",
         description: null,
@@ -226,8 +248,21 @@ describe("createTaskUpdateToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", { taskId: "task-123" })).rejects.toThrow(
-      "task_update failed: task_update requires at least one supported field: status, priority, or description"
+      "task_update failed: task_update requires at least one supported field: title, status, priority, or description"
     );
+  });
+
+  it("surfaces title validation failures with tool-specific context", async () => {
+    const tool = createTaskUpdateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", {
+        taskId: "task-123",
+        title: "   ",
+      })
+    ).rejects.toThrow("task_update failed: title is required");
   });
 
   it("surfaces service failures with tool-specific context", async () => {

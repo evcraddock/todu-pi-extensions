@@ -108,6 +108,7 @@ Planned V1 parameters:
   - `description?: string`
 - `task_update`
   - `taskId: TaskId`
+  - `title?: string`
   - `status?: TaskStatus`
   - `priority?: TaskPriority`
   - `description?: string`
@@ -120,7 +121,7 @@ Planned V1 parameters:
 Deferred from V1 even if other clients support them:
 
 - task labels on `task_create`
-- title changes, due dates, scheduled dates, and label updates on `task_update`
+- due dates, scheduled dates, and label updates on `task_update`
 - all delete, move, integration, habit, and recurring operations
 
 #### Result and `details` contract
@@ -169,7 +170,7 @@ The initial guideline set should reinforce that:
 
 - tools are for backend operations, not interactive browsing flows
 - slash commands remain the right choice for rich TUI navigation and editing
-- `task_update` supports only status, priority, and description in V1
+- `task_update` supports only title, status, priority, and description in V1
 - `task_create` requires explicit `projectId`
 
 #### UI-neutrality contract
@@ -201,7 +202,7 @@ Current service capabilities already available:
 - list tasks
 - get task detail
 - create task
-- update task status, priority, and description
+- update task title, status, priority, and description
 - add task comment
 - list projects
 - get project summary
@@ -227,7 +228,7 @@ Recommended V1 behavior per tool:
   - accepts title, required project ID, and optional description
   - defers labels for V1 even if the backend can support them
 - `task_update`
-  - supports only the currently implemented update surface: status, priority, and description
+  - supports only the currently implemented update surface: title, status, priority, and description
   - explicitly defer unsupported task fields rather than widening the contract implicitly
 - `task_comment_create`
   - accepts task ID and comment content
