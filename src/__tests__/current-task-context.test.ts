@@ -144,4 +144,60 @@ describe("createCurrentTaskContextController", () => {
       "active • medium • Todu Pi Extensions",
     ]);
   });
+
+  it("clears the current task when a focused task becomes done", async () => {
+    const initialTask = createTaskDetail();
+    const doneTask = createTaskDetail({ status: "done" });
+    const getTask = vi.fn().mockResolvedValue(doneTask);
+    const appendEntry = vi.fn();
+    const ctx = createContext();
+    const controller = createCurrentTaskContextController(
+      { appendEntry },
+      {
+        runtime: {
+          ensureConnected: vi.fn().mockResolvedValue({ getTask }),
+          client: { on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }) },
+        } as never,
+      }
+    );
+
+    await controller.setCurrentTask(ctx as never, initialTask);
+    await controller.handleDataChanged();
+
+    expect(getTask).toHaveBeenCalledWith(initialTask.id);
+    expect(controller.getState()).toEqual({ currentTaskId: null, currentTask: null });
+    expect(appendEntry).toHaveBeenLastCalledWith(TASK_SESSION_ENTRY_TYPE, {
+      currentTaskId: null,
+    });
+    expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(CURRENT_TASK_STATUS_KEY, undefined);
+    expect(ctx.ui.setWidget).toHaveBeenLastCalledWith(CURRENT_TASK_WIDGET_KEY, undefined);
+  });
+
+  it("clears the current task when a focused task becomes cancelled", async () => {
+    const initialTask = createTaskDetail();
+    const cancelledTask = createTaskDetail({ status: "cancelled" });
+    const getTask = vi.fn().mockResolvedValue(cancelledTask);
+    const appendEntry = vi.fn();
+    const ctx = createContext();
+    const controller = createCurrentTaskContextController(
+      { appendEntry },
+      {
+        runtime: {
+          ensureConnected: vi.fn().mockResolvedValue({ getTask }),
+          client: { on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }) },
+        } as never,
+      }
+    );
+
+    await controller.setCurrentTask(ctx as never, initialTask);
+    await controller.handleDataChanged();
+
+    expect(getTask).toHaveBeenCalledWith(initialTask.id);
+    expect(controller.getState()).toEqual({ currentTaskId: null, currentTask: null });
+    expect(appendEntry).toHaveBeenLastCalledWith(TASK_SESSION_ENTRY_TYPE, {
+      currentTaskId: null,
+    });
+    expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(CURRENT_TASK_STATUS_KEY, undefined);
+    expect(ctx.ui.setWidget).toHaveBeenLastCalledWith(CURRENT_TASK_WIDGET_KEY, undefined);
+  });
 });
