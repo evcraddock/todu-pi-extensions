@@ -8,6 +8,7 @@ import {
   getDefaultSyncStatusContextController,
   resetDefaultSyncStatusContextController,
 } from "./sync-status-context";
+import { resetDefaultTaskBrowseFilterContextController } from "./task-browse-filter-context";
 
 const registerEvents = (pi: ExtensionAPI): void => {
   const currentTaskContext = getDefaultCurrentTaskContextController(pi);
@@ -36,6 +37,7 @@ const registerEvents = (pi: ExtensionAPI): void => {
     await Promise.all([
       resetDefaultCurrentTaskContextController(),
       resetDefaultSyncStatusContextController(),
+      resetDefaultTaskBrowseFilterContextController(),
     ]);
   });
 };

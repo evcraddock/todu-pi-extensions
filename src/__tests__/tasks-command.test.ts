@@ -6,12 +6,14 @@ import {
   createTaskCommandHandler,
   createTaskNewCommandHandler,
   createTasksCommandHandler,
-  DEFAULT_BROWSE_TASKS_FILTER,
+  DEFAULT_TASK_BROWSE_FILTER_STATE,
   openSelectedTaskDetail,
   openTaskDetailHub,
   registerCommands,
   resolveRequestedTaskId,
+  showTaskBrowseFilterMode,
 } from "@/extension/register-commands";
+import { createTaskBrowseFilterState } from "@/services/task-browse-filter-store";
 import type { TaskService } from "@/services/task-service";
 
 const createTaskSummary = (): TaskSummary => ({
@@ -42,6 +44,9 @@ const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectS
 
 const createCommandContext = () => ({
   hasUI: true,
+  sessionManager: {
+    getBranch: vi.fn().mockReturnValue([]),
+  },
   ui: {
     notify: vi.fn(),
     setEditorText: vi.fn(),
@@ -50,6 +55,22 @@ const createCommandContext = () => ({
     custom: vi.fn(),
   },
 });
+
+const createTaskBrowseFilterController = (initialState = createTaskBrowseFilterState()) => {
+  let state = initialState;
+
+  return {
+    restoreFromBranch: vi.fn().mockImplementation(async () => undefined),
+    getState: vi.fn().mockImplementation(() => state),
+    setState: vi.fn().mockImplementation(async (_ctx, nextState) => {
+      state = nextState;
+    }),
+    clear: vi.fn().mockImplementation(async () => {
+      state = createTaskBrowseFilterState();
+    }),
+    dispose: vi.fn().mockResolvedValue(undefined),
+  };
+};
 
 describe("registerCommands", () => {
   it("registers the /tasks, /task, /task-clear, and /task-new commands", () => {
@@ -63,7 +84,7 @@ describe("registerCommands", () => {
     expect(pi.registerCommand).toHaveBeenCalledWith(
       "tasks",
       expect.objectContaining({
-        description: "Browse active todu tasks",
+        description: "Browse and filter todu tasks",
         handler: expect.any(Function),
       })
     );
@@ -106,41 +127,116 @@ describe("createTasksCommandHandler", () => {
     stderrWrite.mockRestore();
   });
 
-  it("shows the empty state when there are no active tasks", async () => {
-    const context = createCommandContext();
-    const taskService = {} as TaskService;
-    const getTaskService = vi.fn().mockResolvedValue(taskService);
-    const loadTasks = vi.fn().mockResolvedValue({ status: "loaded", tasks: [] });
-    const showEmptyState = vi.fn().mockResolvedValue(undefined);
-
-    const handler = createTasksCommandHandler({
-      getTaskService,
-      loadTasks,
-      showEmptyState,
-    });
-
-    await handler("", context as never);
-
-    expect(getTaskService).toHaveBeenCalledTimes(1);
-    expect(loadTasks).toHaveBeenCalledWith(context, taskService);
-    expect(showEmptyState).toHaveBeenCalledWith(context);
-    expect(context.ui.notify).not.toHaveBeenCalled();
-  });
-
-  it("reports cancellation after the picker closes without a selection", async () => {
+  it("enters filter mode on the first /tasks run", async () => {
     const context = createCommandContext();
     const taskService = {} as TaskService;
     const task = createTaskSummary();
+    const taskBrowseFilterController = createTaskBrowseFilterController();
+    const editTaskBrowseFilters = vi.fn().mockResolvedValue({
+      status: "saved",
+      filterState: createTaskBrowseFilterState({
+        hasSavedFilter: true,
+        status: "active",
+      }),
+    });
+    const loadTasks = vi.fn().mockResolvedValue({ status: "loaded", tasks: [task] });
+    const showTaskBrowseView = vi.fn().mockResolvedValue({ status: "closed" });
     const handler = createTasksCommandHandler({
       getTaskService: vi.fn().mockResolvedValue(taskService),
-      loadTasks: vi.fn().mockResolvedValue({ status: "loaded", tasks: [task] }),
-      selectTask: vi.fn().mockResolvedValue(null),
+      taskBrowseFilterController: taskBrowseFilterController as never,
+      editTaskBrowseFilters,
+      loadTasks,
+      showTaskBrowseView,
     });
 
     await handler("", context as never);
 
-    expect(context.ui.notify).toHaveBeenCalledWith("Task browse cancelled", "info");
-    expect(context.ui.setEditorText).not.toHaveBeenCalled();
+    expect(taskBrowseFilterController.restoreFromBranch).toHaveBeenCalledWith(context);
+    expect(editTaskBrowseFilters).toHaveBeenCalledWith(
+      context,
+      taskService,
+      createTaskBrowseFilterState()
+    );
+    expect(taskBrowseFilterController.setState).toHaveBeenCalledWith(
+      context,
+      createTaskBrowseFilterState({ hasSavedFilter: true, status: "active" })
+    );
+    expect(loadTasks).toHaveBeenCalledWith(
+      context,
+      taskService,
+      { statuses: ["active"], priorities: undefined, projectId: undefined },
+      "Status Active • Priority Any • Project Any"
+    );
+  });
+
+  it("reopens the saved filtered view on subsequent /tasks runs", async () => {
+    const context = createCommandContext();
+    const taskService = {} as TaskService;
+    const task = createTaskSummary();
+    const savedState = createTaskBrowseFilterState({
+      hasSavedFilter: true,
+      priority: "high",
+      projectId: "proj-1",
+      projectName: "Todu Pi Extensions",
+    });
+    const taskBrowseFilterController = createTaskBrowseFilterController(savedState);
+    const loadTasks = vi.fn().mockResolvedValue({ status: "loaded", tasks: [task] });
+    const showTaskBrowseView = vi.fn().mockResolvedValue({ status: "closed" });
+    const editTaskBrowseFilters = vi.fn();
+    const handler = createTasksCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      taskBrowseFilterController: taskBrowseFilterController as never,
+      editTaskBrowseFilters,
+      loadTasks,
+      showTaskBrowseView,
+    });
+
+    await handler("", context as never);
+
+    expect(editTaskBrowseFilters).not.toHaveBeenCalled();
+    expect(loadTasks).toHaveBeenCalledWith(
+      context,
+      taskService,
+      { statuses: undefined, priorities: ["high"], projectId: "proj-1" },
+      "Status Any • Priority High • Project Todu Pi Extensions"
+    );
+    expect(showTaskBrowseView).toHaveBeenCalledWith(context, [task], savedState);
+  });
+
+  it("lets view mode switch back to filter mode", async () => {
+    const context = createCommandContext();
+    const taskService = {} as TaskService;
+    const task = createTaskSummary();
+    const taskBrowseFilterController = createTaskBrowseFilterController(
+      createTaskBrowseFilterState({ hasSavedFilter: true, status: "active" })
+    );
+    const loadTasks = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "loaded", tasks: [task] })
+      .mockResolvedValueOnce({ status: "loaded", tasks: [task] });
+    const showTaskBrowseView = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "change-filters" })
+      .mockResolvedValueOnce({ status: "closed" });
+    const editTaskBrowseFilters = vi.fn().mockResolvedValue({
+      status: "saved",
+      filterState: createTaskBrowseFilterState({ hasSavedFilter: true, priority: "medium" }),
+    });
+    const handler = createTasksCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      taskBrowseFilterController: taskBrowseFilterController as never,
+      editTaskBrowseFilters,
+      loadTasks,
+      showTaskBrowseView,
+    });
+
+    await handler("", context as never);
+
+    expect(editTaskBrowseFilters).toHaveBeenCalledTimes(1);
+    expect(taskBrowseFilterController.setState).toHaveBeenCalledWith(
+      context,
+      createTaskBrowseFilterState({ hasSavedFilter: true, priority: "medium" })
+    );
   });
 
   it("opens the selected task detail after a successful selection", async () => {
@@ -150,8 +246,11 @@ describe("createTasksCommandHandler", () => {
     const openTaskDetail = vi.fn().mockResolvedValue(undefined);
     const handler = createTasksCommandHandler({
       getTaskService: vi.fn().mockResolvedValue(taskService),
+      taskBrowseFilterController: createTaskBrowseFilterController(
+        createTaskBrowseFilterState({ hasSavedFilter: true, status: "active" })
+      ) as never,
       loadTasks: vi.fn().mockResolvedValue({ status: "loaded", tasks: [task] }),
-      selectTask: vi.fn().mockResolvedValue(task.id),
+      showTaskBrowseView: vi.fn().mockResolvedValue({ status: "selected", taskId: task.id }),
       openTaskDetail,
     });
 
@@ -160,26 +259,139 @@ describe("createTasksCommandHandler", () => {
     expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, task.id);
   });
 
+  it("shows the empty filtered state when no tasks match", async () => {
+    const context = createCommandContext();
+    const taskService = {} as TaskService;
+    const taskBrowseFilterController = createTaskBrowseFilterController(
+      createTaskBrowseFilterState({ hasSavedFilter: true, status: "waiting" })
+    );
+    const loadTasks = vi.fn().mockResolvedValue({ status: "loaded", tasks: [] });
+    const showEmptyState = vi.fn().mockResolvedValue("close");
+    const handler = createTasksCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      taskBrowseFilterController: taskBrowseFilterController as never,
+      loadTasks,
+      showEmptyState,
+    });
+
+    await handler("", context as never);
+
+    expect(showEmptyState).toHaveBeenCalledWith(
+      context,
+      createTaskBrowseFilterState({ hasSavedFilter: true, status: "waiting" })
+    );
+  });
+
+  it("clears saved filters from the empty state and reloads an unfiltered view", async () => {
+    const context = createCommandContext();
+    const taskService = {} as TaskService;
+    const task = createTaskSummary();
+    const taskBrowseFilterController = createTaskBrowseFilterController(
+      createTaskBrowseFilterState({
+        hasSavedFilter: true,
+        status: "waiting",
+        priority: "high",
+        projectId: "proj-1",
+        projectName: "Todu Pi Extensions",
+      })
+    );
+    const loadTasks = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "loaded", tasks: [] })
+      .mockResolvedValueOnce({ status: "loaded", tasks: [task] });
+    const showEmptyState = vi.fn().mockResolvedValue("clear-filters");
+    const showTaskBrowseView = vi.fn().mockResolvedValue({ status: "closed" });
+    const handler = createTasksCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      taskBrowseFilterController: taskBrowseFilterController as never,
+      loadTasks,
+      showEmptyState,
+      showTaskBrowseView,
+    });
+
+    await handler("", context as never);
+
+    expect(taskBrowseFilterController.setState).toHaveBeenCalledWith(
+      context,
+      createTaskBrowseFilterState({
+        hasSavedFilter: true,
+        status: null,
+        priority: null,
+        projectId: null,
+        projectName: null,
+      })
+    );
+    expect(loadTasks).toHaveBeenLastCalledWith(
+      context,
+      taskService,
+      { statuses: undefined, priorities: undefined, projectId: undefined },
+      "Status Any • Priority Any • Project Any"
+    );
+  });
+
   it("reports task loading errors", async () => {
     const context = createCommandContext();
     const handler = createTasksCommandHandler({
       getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+      taskBrowseFilterController: createTaskBrowseFilterController(
+        createTaskBrowseFilterState({ hasSavedFilter: true, status: "active" })
+      ) as never,
       loadTasks: vi.fn().mockResolvedValue({
         status: "error",
-        message: "Failed to load active tasks: daemon unavailable",
+        message: "Failed to load filtered tasks: daemon unavailable",
       }),
     });
 
     await handler("", context as never);
 
     expect(context.ui.notify).toHaveBeenCalledWith(
-      "Failed to load active tasks: daemon unavailable",
+      "Failed to load filtered tasks: daemon unavailable",
       "error"
     );
   });
 
-  it("keeps the browse flow scoped to active tasks by default", () => {
-    expect(DEFAULT_BROWSE_TASKS_FILTER).toEqual({ statuses: ["active"] });
+  it("starts with no saved filters by default", () => {
+    expect(DEFAULT_TASK_BROWSE_FILTER_STATE).toEqual({
+      hasSavedFilter: false,
+      status: null,
+      priority: null,
+      projectId: null,
+      projectName: null,
+    });
+  });
+});
+
+describe("showTaskBrowseFilterMode", () => {
+  it("resets filters back to Any before applying", async () => {
+    const context = createCommandContext();
+    context.ui.custom = vi.fn().mockResolvedValueOnce("reset").mockResolvedValueOnce("apply");
+    const taskService = {
+      listProjects: vi.fn().mockResolvedValue([createProjectSummary()]),
+    } as unknown as TaskService;
+
+    const result = await showTaskBrowseFilterMode(
+      context as never,
+      taskService,
+      createTaskBrowseFilterState({
+        hasSavedFilter: true,
+        status: "done",
+        priority: "high",
+        projectId: "proj-1",
+        projectName: "Todu Pi Extensions",
+      })
+    );
+
+    expect(result).toEqual({
+      status: "saved",
+      filterState: createTaskBrowseFilterState({
+        hasSavedFilter: true,
+        status: null,
+        priority: null,
+        projectId: null,
+        projectName: null,
+      }),
+    });
+    expect(taskService.listProjects).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
-import { Container, matchesKey, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
+import { Container, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 
 import type {
   ProjectSummary,
@@ -18,6 +18,8 @@ import { showTaskDetail } from "../flows/show-task-detail";
 import { updateTask } from "../flows/update-task";
 import type { TaskService } from "../services/task-service";
 import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-service";
+import type { TaskBrowseFilterState } from "../services/task-browse-filter-store";
+import { createTaskBrowseFilterState } from "../services/task-browse-filter-store";
 import {
   createTaskDetailActionItems,
   createTaskDetailViewModel,
@@ -33,10 +35,12 @@ import {
   type TaskSettingOption,
 } from "../ui/components/task-settings";
 import { getDefaultCurrentTaskContextController } from "./current-task-context";
+import {
+  getDefaultTaskBrowseFilterContextController,
+  type TaskBrowseFilterContextController,
+} from "./task-browse-filter-context";
 
-const DEFAULT_BROWSE_TASKS_FILTER: TaskFilter = {
-  statuses: ["active"],
-};
+const DEFAULT_TASK_BROWSE_FILTER_STATE: TaskBrowseFilterState = createTaskBrowseFilterState();
 
 interface LoadedTasksResult {
   status: "loaded";
@@ -59,6 +63,18 @@ type SelectTaskProjectResult =
   | { status: "cancelled" }
   | { status: "unavailable" };
 
+type EditTaskBrowseFiltersResult =
+  | { status: "saved"; filterState: TaskBrowseFilterState }
+  | { status: "cancelled" };
+
+type TaskBrowseViewResult =
+  | { status: "selected"; taskId: TaskId }
+  | { status: "change-filters" }
+  | { status: "clear-filters" }
+  | { status: "closed" };
+
+type EmptyTaskBrowseAction = "change-filters" | "clear-filters" | "close";
+
 export interface RegisterCommandDependencies {
   getTaskService?: () => Promise<TaskService>;
   getCurrentTaskId?: () => TaskId | null;
@@ -72,12 +88,27 @@ export interface RegisterCommandDependencies {
     ctx: ExtensionCommandContext,
     taskTitle: string
   ) => Promise<string | undefined>;
+  taskBrowseFilterController?: TaskBrowseFilterContextController;
+  editTaskBrowseFilters?: (
+    ctx: ExtensionCommandContext,
+    taskService: TaskService,
+    currentState: TaskBrowseFilterState
+  ) => Promise<EditTaskBrowseFiltersResult>;
   loadTasks?: (
     ctx: ExtensionCommandContext,
-    taskService: TaskService
+    taskService: TaskService,
+    filter: TaskFilter,
+    filterSummary: string
   ) => Promise<TaskBrowseLoadResult>;
-  selectTask?: (ctx: ExtensionCommandContext, tasks: TaskSummary[]) => Promise<TaskId | null>;
-  showEmptyState?: (ctx: ExtensionCommandContext) => Promise<void>;
+  showTaskBrowseView?: (
+    ctx: ExtensionCommandContext,
+    tasks: TaskSummary[],
+    filterState: TaskBrowseFilterState
+  ) => Promise<TaskBrowseViewResult>;
+  showEmptyState?: (
+    ctx: ExtensionCommandContext,
+    filterState: TaskBrowseFilterState
+  ) => Promise<EmptyTaskBrowseAction>;
   setCurrentTask?: (ctx: ExtensionCommandContext, task: TaskDetail) => Promise<void>;
   showTaskDetailView?: (
     ctx: ExtensionCommandContext,
@@ -101,8 +132,11 @@ const createTasksCommandHandler = (
 ): ((args: string, ctx: ExtensionCommandContext) => Promise<void>) => {
   const getTaskService =
     dependencies.getTaskService ?? (() => getDefaultToduTaskServiceRuntime().ensureConnected());
-  const loadTasks = dependencies.loadTasks ?? loadActiveTasksWithLoader;
-  const selectTask = dependencies.selectTask ?? selectTaskFromList;
+  const getTaskBrowseFilterController = () =>
+    dependencies.taskBrowseFilterController ?? getDefaultTaskBrowseFilterContextController();
+  const editTaskBrowseFilters = dependencies.editTaskBrowseFilters ?? showTaskBrowseFilterMode;
+  const loadTasks = dependencies.loadTasks ?? loadTasksWithLoader;
+  const showTaskBrowseView = dependencies.showTaskBrowseView ?? selectTaskBrowseViewAction;
   const showEmptyState = dependencies.showEmptyState ?? showEmptyTasksState;
   const setCurrentTask =
     dependencies.setCurrentTask ??
@@ -126,31 +160,80 @@ const createTasksCommandHandler = (
     }
 
     try {
+      const taskBrowseFilterController = getTaskBrowseFilterController();
+      await taskBrowseFilterController.restoreFromBranch(ctx);
       const taskService = await getTaskService();
-      const loadedTasks = await loadTasks(ctx, taskService);
+      let mode: "filter" | "view" = taskBrowseFilterController.getState().hasSavedFilter
+        ? "view"
+        : "filter";
 
-      if (loadedTasks.status === "cancelled") {
-        ctx.ui.notify("Task browse cancelled", "info");
+      while (true) {
+        if (mode === "filter") {
+          const filterEditResult = await editTaskBrowseFilters(
+            ctx,
+            taskService,
+            taskBrowseFilterController.getState()
+          );
+
+          if (filterEditResult.status === "cancelled") {
+            ctx.ui.notify("Task browse cancelled", "info");
+            return;
+          }
+
+          await taskBrowseFilterController.setState(ctx, filterEditResult.filterState);
+          mode = "view";
+          continue;
+        }
+
+        const filterState = taskBrowseFilterController.getState();
+        const taskFilter = createTaskFilterFromBrowseState(filterState);
+        const filterSummary = formatTaskBrowseFilterSummary(filterState);
+        const loadedTasks = await loadTasks(ctx, taskService, taskFilter, filterSummary);
+
+        if (loadedTasks.status === "cancelled") {
+          ctx.ui.notify("Task browse cancelled", "info");
+          return;
+        }
+
+        if (loadedTasks.status === "error") {
+          ctx.ui.notify(loadedTasks.message, "error");
+          return;
+        }
+
+        if (loadedTasks.tasks.length === 0) {
+          const emptyAction = await showEmptyState(ctx, filterState);
+          if (emptyAction === "change-filters") {
+            mode = "filter";
+            continue;
+          }
+
+          if (emptyAction === "clear-filters") {
+            await taskBrowseFilterController.setState(ctx, createSavedTaskBrowseFilterState());
+            continue;
+          }
+
+          return;
+        }
+
+        const browseViewResult = await showTaskBrowseView(ctx, loadedTasks.tasks, filterState);
+        if (browseViewResult.status === "closed") {
+          ctx.ui.notify("Task browse cancelled", "info");
+          return;
+        }
+
+        if (browseViewResult.status === "change-filters") {
+          mode = "filter";
+          continue;
+        }
+
+        if (browseViewResult.status === "clear-filters") {
+          await taskBrowseFilterController.setState(ctx, createSavedTaskBrowseFilterState());
+          continue;
+        }
+
+        await openTaskDetail(ctx, taskService, browseViewResult.taskId);
         return;
       }
-
-      if (loadedTasks.status === "error") {
-        ctx.ui.notify(loadedTasks.message, "error");
-        return;
-      }
-
-      if (loadedTasks.tasks.length === 0) {
-        await showEmptyState(ctx);
-        return;
-      }
-
-      const taskId = await selectTask(ctx, loadedTasks.tasks);
-      if (!taskId) {
-        ctx.ui.notify("Task browse cancelled", "info");
-        return;
-      }
-
-      await openTaskDetail(ctx, taskService, taskId);
     } catch (error) {
       ctx.ui.notify(formatTasksCommandError(error, "Failed to browse tasks"), "error");
     }
@@ -355,9 +438,10 @@ const registerCommands = (
   dependencies: RegisterCommandDependencies = {}
 ): void => {
   getDefaultCurrentTaskContextController(pi);
+  getDefaultTaskBrowseFilterContextController(pi);
 
   pi.registerCommand("tasks", {
-    description: "Browse active todu tasks",
+    description: "Browse and filter todu tasks",
     handler: createTasksCommandHandler(dependencies),
   });
 
@@ -377,15 +461,17 @@ const registerCommands = (
   });
 };
 
-const loadActiveTasksWithLoader = async (
+const loadTasksWithLoader = async (
   ctx: ExtensionCommandContext,
-  taskService: TaskService
+  taskService: TaskService,
+  filter: TaskFilter,
+  filterSummary: string
 ): Promise<TaskBrowseLoadResult> =>
   ctx.ui.custom<TaskBrowseLoadResult>((tui, theme, _keybindings, done) => {
     const loader = new BorderedLoader(
       tui,
       theme,
-      createTaskLoaderViewModel("Loading active tasks...").label
+      createTaskLoaderViewModel(`Loading tasks · ${filterSummary}`).label
     );
     let settled = false;
 
@@ -400,32 +486,127 @@ const loadActiveTasksWithLoader = async (
 
     loader.onAbort = () => settle({ status: "cancelled" });
 
-    void browseTasks({ taskService }, DEFAULT_BROWSE_TASKS_FILTER)
+    void browseTasks({ taskService }, filter)
       .then((tasks) => {
         settle({ status: "loaded", tasks });
       })
       .catch((error: unknown) => {
         settle({
           status: "error",
-          message: formatTasksCommandError(error, "Failed to load active tasks"),
+          message: formatTasksCommandError(error, "Failed to load filtered tasks"),
         });
       });
 
     return loader;
   });
 
-const selectTaskFromList = async (
+const showTaskBrowseFilterMode = async (
   ctx: ExtensionCommandContext,
-  tasks: TaskSummary[]
-): Promise<TaskId | null> => {
-  const items: SelectItem[] = tasks.map((task) => createTaskListItem(task));
+  taskService: TaskService,
+  currentState: TaskBrowseFilterState
+): Promise<EditTaskBrowseFiltersResult> => {
+  const projects = [...(await taskService.listProjects())].sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+  let draftState = createTaskBrowseFilterState({
+    ...currentState,
+    hasSavedFilter: true,
+  });
 
-  return ctx.ui.custom<TaskId | null>((tui, theme, _keybindings, done) => {
+  while (true) {
+    const action = await selectTaskBrowseFilterModeAction(ctx, draftState, projects);
+    if (!action) {
+      return { status: "cancelled" };
+    }
+
+    if (action === "apply") {
+      return { status: "saved", filterState: draftState };
+    }
+
+    if (action === "reset") {
+      draftState = createSavedTaskBrowseFilterState();
+      continue;
+    }
+
+    if (action === "status") {
+      const nextStatus = await selectOptionalTaskSettingFromList(ctx, {
+        title: "Filter by status",
+        options: createTaskBrowseStatusOptions(),
+        currentValue: draftState.status,
+        currentLabel: formatTaskBrowseStatusFilterLabel(draftState.status),
+        actionLabel: "status filter",
+      });
+      if (nextStatus !== undefined) {
+        draftState = createTaskBrowseFilterState({
+          ...draftState,
+          hasSavedFilter: true,
+          status: nextStatus,
+        });
+      }
+      continue;
+    }
+
+    if (action === "priority") {
+      const nextPriority = await selectOptionalTaskSettingFromList(ctx, {
+        title: "Filter by priority",
+        options: createTaskBrowsePriorityOptions(),
+        currentValue: draftState.priority,
+        currentLabel: formatTaskBrowsePriorityFilterLabel(draftState.priority),
+        actionLabel: "priority filter",
+      });
+      if (nextPriority !== undefined) {
+        draftState = createTaskBrowseFilterState({
+          ...draftState,
+          hasSavedFilter: true,
+          priority: nextPriority,
+        });
+      }
+      continue;
+    }
+
+    const nextProject = await selectTaskBrowseProjectFilter(ctx, projects, draftState.projectId);
+    if (nextProject !== undefined) {
+      draftState = createTaskBrowseFilterState({
+        ...draftState,
+        hasSavedFilter: true,
+        projectId: nextProject.projectId,
+        projectName: nextProject.projectName,
+      });
+    }
+  }
+};
+
+const selectTaskBrowseViewAction = async (
+  ctx: ExtensionCommandContext,
+  tasks: TaskSummary[],
+  filterState: TaskBrowseFilterState
+): Promise<TaskBrowseViewResult> => {
+  const items: SelectItem[] = [
+    {
+      value: "action:change-filters",
+      label: "Change filters",
+      description: "Edit status, priority, or project filters",
+    },
+    {
+      value: "action:clear-filters",
+      label: "Clear filters",
+      description: "Reset all filters to Any",
+    },
+    ...tasks.map((task) => ({
+      ...createTaskListItem(task),
+      value: `task:${task.id}`,
+    })),
+  ];
+
+  return ctx.ui.custom<TaskBrowseViewResult>((tui, theme, _keybindings, done) => {
     const container = new Container();
     container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
     container.addChild(new Text(theme.fg("accent", theme.bold("Browse Tasks")), 1, 0));
+    container.addChild(
+      new Text(theme.fg("muted", `Filters: ${formatTaskBrowseFilterSummary(filterState)}`), 1, 0)
+    );
 
-    const selectList = new SelectList(items, Math.min(items.length, 10), {
+    const selectList = new SelectList(items, Math.min(items.length, 12), {
       selectedPrefix: (text) => theme.fg("accent", text),
       selectedText: (text) => theme.fg("accent", text),
       description: (text) => theme.fg("muted", text),
@@ -433,7 +614,154 @@ const selectTaskFromList = async (
       noMatch: (text) => theme.fg("warning", text),
     });
 
-    selectList.onSelect = (item) => done(item.value as TaskId);
+    selectList.onSelect = (item) => {
+      const value = item.value as string;
+      if (value === "action:change-filters") {
+        done({ status: "change-filters" });
+        return;
+      }
+
+      if (value === "action:clear-filters") {
+        done({ status: "clear-filters" });
+        return;
+      }
+
+      done({ status: "selected", taskId: value.replace(/^task:/, "") });
+    };
+    selectList.onCancel = () => done({ status: "closed" });
+
+    container.addChild(selectList);
+    container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter select • esc close"), 1, 0));
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+    return {
+      render: (width: number) => container.render(width),
+      invalidate: () => container.invalidate(),
+      handleInput: (data: string) => {
+        selectList.handleInput(data);
+        tui.requestRender();
+      },
+    };
+  });
+};
+
+const showEmptyTasksState = async (
+  ctx: ExtensionCommandContext,
+  filterState: TaskBrowseFilterState
+): Promise<EmptyTaskBrowseAction> =>
+  ctx.ui.custom<EmptyTaskBrowseAction>((_tui, theme, _keybindings, done) => {
+    const items: SelectItem[] = [
+      {
+        value: "change-filters",
+        label: "Change filters",
+        description: "Adjust the current task filters",
+      },
+      {
+        value: "clear-filters",
+        label: "Clear filters",
+        description: "Reset all filters to Any",
+      },
+      {
+        value: "close",
+        label: "Close",
+        description: "Exit task browsing",
+      },
+    ];
+    const container = new Container();
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    container.addChild(new Text(theme.fg("accent", theme.bold("Browse Tasks")), 1, 0));
+    container.addChild(
+      new Text(
+        theme.fg(
+          "muted",
+          `No tasks match the current filters: ${formatTaskBrowseFilterSummary(filterState)}`
+        ),
+        1,
+        1
+      )
+    );
+
+    const selectList = new SelectList(items, items.length, {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+
+    selectList.onSelect = (item) => done(item.value as EmptyTaskBrowseAction);
+    selectList.onCancel = () => done("close");
+
+    container.addChild(selectList);
+    container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter select • esc close"), 1, 0));
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+    return {
+      render: (width: number) => container.render(width),
+      invalidate: () => container.invalidate(),
+      handleInput: (data: string) => {
+        selectList.handleInput(data);
+        _tui.requestRender();
+      },
+    };
+  });
+
+type TaskBrowseFilterModeAction = "status" | "priority" | "project" | "apply" | "reset";
+
+const selectTaskBrowseFilterModeAction = async (
+  ctx: ExtensionCommandContext,
+  filterState: TaskBrowseFilterState,
+  projects: ProjectSummary[]
+): Promise<TaskBrowseFilterModeAction | null> => {
+  const items: SelectItem[] = [
+    {
+      value: "status",
+      label: `Status: ${formatTaskBrowseStatusFilterLabel(filterState.status)}`,
+      description: "Choose a status filter or Any",
+    },
+    {
+      value: "priority",
+      label: `Priority: ${formatTaskBrowsePriorityFilterLabel(filterState.priority)}`,
+      description: "Choose a priority filter or Any",
+    },
+    {
+      value: "project",
+      label: `Project: ${formatTaskBrowseProjectFilterLabel(
+        filterState.projectId,
+        projects.find((project) => project.id === filterState.projectId)?.name ??
+          filterState.projectName
+      )}`,
+      description: "Choose a project filter or Any",
+    },
+    {
+      value: "apply",
+      label: "View tasks",
+      description: `Open the filtered list (${formatTaskBrowseFilterSummary(filterState)})`,
+    },
+    {
+      value: "reset",
+      label: "Reset filters",
+      description: "Set status, priority, and project back to Any",
+    },
+  ];
+
+  return ctx.ui.custom<TaskBrowseFilterModeAction | null>((tui, theme, _keybindings, done) => {
+    const container = new Container();
+    container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    container.addChild(new Text(theme.fg("accent", theme.bold("Task Filters")), 1, 0));
+    container.addChild(
+      new Text(theme.fg("muted", "Set the filters to use when browsing tasks."), 1, 0)
+    );
+
+    const selectList = new SelectList(items, items.length, {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+
+    selectList.onSelect = (item) => done(item.value as TaskBrowseFilterModeAction);
     selectList.onCancel = () => done(null);
 
     container.addChild(selectList);
@@ -451,25 +779,149 @@ const selectTaskFromList = async (
   });
 };
 
-const showEmptyTasksState = async (ctx: ExtensionCommandContext): Promise<void> => {
-  await ctx.ui.custom<void>((_tui, theme, _keybindings, done) => {
+interface OptionalTaskSettingOption<TValue extends string | null> {
+  label: string;
+  value: TValue;
+}
+
+interface SelectOptionalTaskSettingFromListOptions<TValue extends string | null> {
+  title: string;
+  options: OptionalTaskSettingOption<TValue>[];
+  currentValue: TValue;
+  currentLabel: string;
+  actionLabel: string;
+}
+
+const selectOptionalTaskSettingFromList = async <TValue extends string | null>(
+  ctx: ExtensionCommandContext,
+  options: SelectOptionalTaskSettingFromListOptions<TValue>
+): Promise<TValue | undefined> => {
+  const items: SelectItem[] = options.options.map((option) => ({
+    value: option.value ?? "__any__",
+    label: option.label,
+    description:
+      option.value === options.currentValue
+        ? `${option.label} (current)`
+        : `Set ${options.actionLabel} to ${option.label}`,
+  }));
+
+  return ctx.ui.custom<TValue | undefined>((tui, theme, _keybindings, done) => {
     const container = new Container();
     container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
-    container.addChild(new Text(theme.fg("accent", theme.bold("Browse Tasks")), 1, 0));
-    container.addChild(new Text(theme.fg("muted", "No active tasks found."), 1, 1));
-    container.addChild(new Text(theme.fg("dim", "Press Enter or Escape to close"), 1, 0));
+    container.addChild(new Text(theme.fg("accent", theme.bold(options.title)), 1, 0));
+    container.addChild(
+      new Text(theme.fg("muted", `Current ${options.actionLabel}: ${options.currentLabel}`), 1, 0)
+    );
+
+    const selectList = new SelectList(items, items.length, {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+
+    selectList.onSelect = (item) => {
+      const selectedValue = item.value === "__any__" ? null : (item.value as TValue);
+      done(selectedValue as TValue);
+    };
+    selectList.onCancel = () => done(undefined);
+
+    container.addChild(selectList);
+    container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter select • esc cancel"), 1, 0));
     container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
 
     return {
       render: (width: number) => container.render(width),
       invalidate: () => container.invalidate(),
       handleInput: (data: string) => {
-        if (matchesKey(data, "enter") || matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
-          done(undefined);
-        }
+        selectList.handleInput(data);
+        tui.requestRender();
       },
     };
   });
+};
+
+const selectTaskBrowseProjectFilter = async (
+  ctx: ExtensionCommandContext,
+  projects: ProjectSummary[],
+  currentProjectId: string | null
+): Promise<{ projectId: string | null; projectName: string | null } | undefined> => {
+  const nextProjectId = await selectOptionalTaskSettingFromList(ctx, {
+    title: "Filter by project",
+    options: [
+      { label: "Any", value: null },
+      ...projects.map((project) => ({
+        label: project.name,
+        value: project.id,
+      })),
+    ],
+    currentValue: currentProjectId,
+    currentLabel: formatTaskBrowseProjectFilterLabel(
+      currentProjectId,
+      projects.find((project) => project.id === currentProjectId)?.name ?? null
+    ),
+    actionLabel: "project filter",
+  });
+
+  if (nextProjectId === undefined) {
+    return undefined;
+  }
+
+  return {
+    projectId: nextProjectId,
+    projectName: nextProjectId
+      ? (projects.find((project) => project.id === nextProjectId)?.name ?? nextProjectId)
+      : null,
+  };
+};
+
+const createTaskBrowseStatusOptions = (): OptionalTaskSettingOption<TaskStatus | null>[] => [
+  { label: "Any", value: null },
+  ...taskStatusOptions,
+];
+
+const createTaskBrowsePriorityOptions = (): OptionalTaskSettingOption<TaskPriority | null>[] => [
+  { label: "Any", value: null },
+  ...taskPriorityOptions,
+];
+
+const createSavedTaskBrowseFilterState = (
+  overrides: Partial<TaskBrowseFilterState> = {}
+): TaskBrowseFilterState =>
+  createTaskBrowseFilterState({
+    hasSavedFilter: true,
+    ...overrides,
+  });
+
+const createTaskFilterFromBrowseState = (filterState: TaskBrowseFilterState): TaskFilter => ({
+  statuses: filterState.status ? [filterState.status] : undefined,
+  priorities: filterState.priority ? [filterState.priority] : undefined,
+  projectId: filterState.projectId ?? undefined,
+});
+
+const formatTaskBrowseFilterSummary = (filterState: TaskBrowseFilterState): string =>
+  [
+    `Status ${formatTaskBrowseStatusFilterLabel(filterState.status)}`,
+    `Priority ${formatTaskBrowsePriorityFilterLabel(filterState.priority)}`,
+    `Project ${formatTaskBrowseProjectFilterLabel(filterState.projectId, filterState.projectName)}`,
+  ].join(" • ");
+
+const formatTaskBrowseStatusFilterLabel = (status: TaskStatus | null): string =>
+  status ? formatTaskStatusLabel(status) : "Any";
+
+const formatTaskBrowsePriorityFilterLabel = (priority: TaskPriority | null): string =>
+  priority ? formatTaskPriorityLabel(priority) : "Any";
+
+const formatTaskBrowseProjectFilterLabel = (
+  projectId: string | null,
+  projectName: string | null
+): string => {
+  if (!projectId) {
+    return "Any";
+  }
+
+  return projectName ?? projectId;
 };
 
 const promptRequiredTaskTitle = async (ctx: ExtensionCommandContext): Promise<string | null> => {
@@ -857,18 +1309,22 @@ export {
   createTaskCommandHandler,
   createTaskNewCommandHandler,
   createTasksCommandHandler,
-  DEFAULT_BROWSE_TASKS_FILTER,
+  createSavedTaskBrowseFilterState,
+  createTaskFilterFromBrowseState,
+  DEFAULT_TASK_BROWSE_FILTER_STATE,
   editTaskComment,
+  formatTaskBrowseFilterSummary,
   formatTasksCommandError,
-  loadActiveTasksWithLoader,
+  loadTasksWithLoader,
   openSelectedTaskDetail,
   openTaskDetailHub,
   registerCommands,
   resolveRequestedTaskId,
+  selectTaskBrowseViewAction,
   selectTaskDetailAction,
-  selectTaskFromList,
   selectTaskPriorityFromList,
   selectTaskStatusFromList,
   showEmptyTasksState,
+  showTaskBrowseFilterMode,
   syncCurrentTaskIfFocused,
 };
