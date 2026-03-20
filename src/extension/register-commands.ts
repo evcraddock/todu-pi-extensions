@@ -1072,6 +1072,13 @@ const openTaskDetailHub = async (
       return;
     }
 
+    if (action === "pickup") {
+      await dependencies.setCurrentTask(ctx, task);
+      ctx.ui.setEditorText(`pickup task ${task.id}`);
+      ctx.ui.notify(`Prepared pickup workflow for ${task.title}`, "info");
+      return;
+    }
+
     if (action === "set-current") {
       await dependencies.setCurrentTask(ctx, task);
       ctx.ui.notify(`Current task set to ${task.title}`, "info");

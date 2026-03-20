@@ -829,6 +829,30 @@ describe("openTaskDetailHub", () => {
     });
     expect(context.ui.notify).toHaveBeenCalledWith(`Added comment to ${task.title}`, "info");
   });
+
+  it("prepares the pickup workflow and sets the current task from the detail hub", async () => {
+    const context = createCommandContext();
+    const task = createTaskDetail({ status: "active" });
+    const setCurrentTask = vi.fn().mockResolvedValue(undefined);
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(task),
+      updateTask: vi.fn(),
+      addTaskComment: vi.fn(),
+    } as unknown as TaskService;
+
+    await openTaskDetailHub(context as never, taskService, task.id, {
+      setCurrentTask,
+      showTaskDetailView: vi.fn().mockResolvedValueOnce("pickup"),
+    });
+
+    expect(setCurrentTask).toHaveBeenCalledWith(context, task);
+    expect(context.ui.setEditorText).toHaveBeenCalledWith(`pickup task ${task.id}`);
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      `Prepared pickup workflow for ${task.title}`,
+      "info"
+    );
+    expect(taskService.updateTask).not.toHaveBeenCalled();
+  });
 });
 
 describe("resolveRequestedTaskId", () => {
