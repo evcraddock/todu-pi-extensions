@@ -1,6 +1,11 @@
 import type { TaskDetail, TaskPriority, TaskStatus } from "../../domain/task";
 
-export type TaskDetailActionKind = "set-current" | "update-status" | "update-priority" | "comment";
+export type TaskDetailActionKind =
+  | "pickup"
+  | "set-current"
+  | "update-status"
+  | "update-priority"
+  | "comment";
 
 export interface TaskDetailActionItem {
   value: TaskDetailActionKind;
@@ -25,28 +30,42 @@ const createTaskDetailViewModel = (
   commentCount: task.comments.length,
 });
 
-const createTaskDetailActionItems = (task: TaskDetail): TaskDetailActionItem[] => [
-  {
-    value: "set-current",
-    label: "Set as current task",
-    description: `Use ${task.id} as the active coding context`,
-  },
-  {
-    value: "update-status",
-    label: "Update status",
-    description: `Change status from ${formatTaskStatusLabel(task.status)}`,
-  },
-  {
-    value: "update-priority",
-    label: "Update priority",
-    description: `Change priority from ${formatTaskPriorityLabel(task.priority)}`,
-  },
-  {
-    value: "comment",
-    label: "Add comment",
-    description: "Open the editor to add a progress note or comment",
-  },
-];
+const createTaskDetailActionItems = (task: TaskDetail): TaskDetailActionItem[] => {
+  const items: TaskDetailActionItem[] = [];
+
+  if (task.status === "active") {
+    items.push({
+      value: "pickup",
+      label: "Pick up task",
+      description: `Prepare the pickup workflow for ${task.id} and set it as current`,
+    });
+  }
+
+  items.push(
+    {
+      value: "set-current",
+      label: "Set as current task",
+      description: `Use ${task.id} as the active coding context`,
+    },
+    {
+      value: "update-status",
+      label: "Update status",
+      description: `Change status from ${formatTaskStatusLabel(task.status)}`,
+    },
+    {
+      value: "update-priority",
+      label: "Update priority",
+      description: `Change priority from ${formatTaskPriorityLabel(task.priority)}`,
+    },
+    {
+      value: "comment",
+      label: "Add comment",
+      description: "Open the editor to add a progress note or comment",
+    }
+  );
+
+  return items;
+};
 
 const createTaskDetailBody = (task: TaskDetail, recentCommentLimit: number): string => {
   const lines = [
