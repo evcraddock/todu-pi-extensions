@@ -278,6 +278,7 @@ const mapCreateTaskInput = (input: CreateTaskInput): Record<string, unknown> => 
 });
 
 const mapUpdateTaskInput = (input: UpdateTaskInput): Record<string, unknown> => ({
+  title: input.title ?? undefined,
   status: input.status ? toRemoteTaskStatus(input.status) : undefined,
   priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
   description: input.description ?? undefined,

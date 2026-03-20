@@ -24,6 +24,7 @@ const TaskCreateParams = Type.Object({
 
 const TaskUpdateParams = Type.Object({
   taskId: Type.String({ description: "Task ID" }),
+  title: Type.Optional(Type.String({ description: "Optional replacement task title" })),
   status: Type.Optional(
     StringEnum(TASK_STATUS_VALUES, { description: "Optional next task status" })
   ),
@@ -50,6 +51,7 @@ interface TaskCreateToolParams {
 
 interface TaskUpdateToolParams {
   taskId: TaskId;
+  title?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
   description?: string;
@@ -116,11 +118,11 @@ const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDepe
 const createTaskUpdateToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
   name: "task_update",
   label: "Task Update",
-  description: "Update a task's status, priority, or description.",
+  description: "Update a task's title, status, priority, or description.",
   promptSnippet: "Update a task's supported metadata fields by task ID.",
   promptGuidelines: [
     "Use this tool for backend task updates in normal chat.",
-    "In V1, only status, priority, and description are supported.",
+    "Supported fields are title, status, priority, and description.",
   ],
   parameters: TaskUpdateParams,
   async execute(_toolCallId: string, params: TaskUpdateToolParams) {
@@ -199,13 +201,22 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     priority: params.priority,
   };
 
+  if (hasOwn(params, "title")) {
+    input.title = normalizeRequiredText(params.title ?? "", "title");
+  }
+
   if (hasOwn(params, "description")) {
     input.description = normalizeNullableText(params.description);
   }
 
-  if (input.status === undefined && input.priority === undefined && !hasOwn(input, "description")) {
+  if (
+    input.title === undefined &&
+    input.status === undefined &&
+    input.priority === undefined &&
+    !hasOwn(input, "description")
+  ) {
     throw new Error(
-      "task_update requires at least one supported field: status, priority, or description"
+      "task_update requires at least one supported field: title, status, priority, or description"
     );
   }
 
@@ -255,6 +266,7 @@ const formatTaskCreateContent = (task: TaskDetail): string =>
 
 const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): string => {
   const changedFields = [
+    input.title !== undefined ? `title=${JSON.stringify(input.title)}` : null,
     input.status !== undefined ? `status=${input.status}` : null,
     input.priority !== undefined ? `priority=${input.priority}` : null,
     hasOwn(input, "description")

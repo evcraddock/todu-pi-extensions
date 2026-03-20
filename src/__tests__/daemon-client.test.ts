@@ -166,6 +166,58 @@ describe("createToduDaemonClient", () => {
     );
   });
 
+  it("updates tasks through task.update with title changes", async () => {
+    const connection = createConnectionMock();
+    connection.request
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          id: "task-1",
+          title: "Renamed task",
+          status: "active",
+          priority: "medium",
+          projectId: "proj-1",
+          labels: ["daemon"],
+          assignees: [],
+          description: "Implement the typed client wrapper",
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [],
+      });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(
+      client.updateTask({
+        taskId: "task-1",
+        title: "Renamed task",
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "task-1",
+        title: "Renamed task",
+      })
+    );
+    expect(connection.request).toHaveBeenNthCalledWith(1, "task.update", {
+      id: "task-1",
+      input: {
+        title: "Renamed task",
+        status: undefined,
+        priority: undefined,
+        description: undefined,
+      },
+    });
+  });
+
   it("creates task comments through note.create", async () => {
     const connection = createConnectionMock();
     connection.request.mockResolvedValue({
