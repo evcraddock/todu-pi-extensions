@@ -107,7 +107,7 @@ const createCurrentTaskContextController = (
     try {
       const taskService = await runtime.ensureConnected();
       const task = await taskService.getTask(currentTaskId);
-      if (!task) {
+      if (!task || isTerminalCurrentTaskStatus(task.status)) {
         currentTask = null;
         taskSessionStore.clearCurrentTask();
         persistTaskSessionState(pi.appendEntry, taskSessionStore.getState());
@@ -194,6 +194,9 @@ const getDefaultCurrentTaskContextController = (
 
   return defaultCurrentTaskContextController;
 };
+
+const isTerminalCurrentTaskStatus = (status: TaskDetail["status"]): boolean =>
+  status === "done" || status === "cancelled";
 
 const resetDefaultCurrentTaskContextController = async (): Promise<void> => {
   if (!defaultCurrentTaskContextController) {
