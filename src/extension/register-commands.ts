@@ -701,6 +701,7 @@ const showEmptyTasksState = async (
       invalidate: () => container.invalidate(),
       handleInput: (data: string) => {
         selectList.handleInput(data);
+        _tui.requestRender();
       },
     };
   });
