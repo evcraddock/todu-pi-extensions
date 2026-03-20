@@ -63,6 +63,17 @@ type SelectTaskProjectResult =
   | { status: "cancelled" }
   | { status: "unavailable" };
 
+interface TaskAuthoringDraft {
+  title: string;
+  description: string | null;
+  projectName: string;
+}
+
+interface TaskAuthoringResult {
+  title: string;
+  description: string | null;
+}
+
 type EditTaskBrowseFiltersResult =
   | { status: "saved"; filterState: TaskBrowseFilterState }
   | { status: "cancelled" };
@@ -84,10 +95,18 @@ export interface RegisterCommandDependencies {
     ctx: ExtensionCommandContext,
     taskService: TaskService
   ) => Promise<SelectTaskProjectResult>;
-  editTaskDescription?: (
+  editTaskExplanation?: (
     ctx: ExtensionCommandContext,
     taskTitle: string
   ) => Promise<string | undefined>;
+  confirmTaskAuthoring?: (
+    ctx: ExtensionCommandContext,
+    draft: TaskAuthoringDraft
+  ) => Promise<boolean>;
+  requestTaskAuthoringAssistance?: (
+    ctx: ExtensionCommandContext,
+    draft: TaskAuthoringDraft
+  ) => Promise<TaskAuthoringResult | null>;
   taskBrowseFilterController?: TaskBrowseFilterContextController;
   editTaskBrowseFilters?: (
     ctx: ExtensionCommandContext,
@@ -333,7 +352,9 @@ const createTaskNewCommandHandler = (
     dependencies.getTaskService ?? (() => getDefaultToduTaskServiceRuntime().ensureConnected());
   const promptTaskTitle = dependencies.promptTaskTitle ?? promptRequiredTaskTitle;
   const selectTaskProject = dependencies.selectTaskProject ?? selectProjectForTaskCreation;
-  const editTaskDescription = dependencies.editTaskDescription ?? editNewTaskDescription;
+  const editTaskExplanation = dependencies.editTaskExplanation ?? editNewTaskExplanation;
+  const confirmTaskAuthoring = dependencies.confirmTaskAuthoring ?? confirmTaskAuthoringHelp;
+  const requestTaskAuthoringAssistance = dependencies.requestTaskAuthoringAssistance;
   const setCurrentTask =
     dependencies.setCurrentTask ??
     ((ctx: ExtensionCommandContext, task: TaskDetail) =>
@@ -387,29 +408,77 @@ const createTaskNewCommandHandler = (
       return;
     }
 
-    let descriptionInput: string | undefined;
+    let explanationInput: string | undefined;
     try {
-      descriptionInput = await editTaskDescription(ctx, title);
+      explanationInput = await editTaskExplanation(ctx, title);
     } catch (error) {
-      ctx.ui.notify(formatTasksCommandError(error, "Failed to collect task description"), "error");
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to collect task explanation"), "error");
       return;
     }
 
-    if (descriptionInput === undefined) {
+    if (explanationInput === undefined) {
       ctx.ui.notify("Task creation cancelled", "info");
       return;
     }
 
-    const description = normalizeOptionalTaskDescription(descriptionInput);
+    const initialDraft: TaskAuthoringDraft = {
+      title,
+      description: normalizeOptionalTaskDescription(explanationInput),
+      projectName: projectSelection.project.name,
+    };
+
+    let finalDraft: TaskAuthoringResult = {
+      title: initialDraft.title,
+      description: initialDraft.description,
+    };
+
+    let wantsTaskAuthoringHelp: boolean;
+    try {
+      wantsTaskAuthoringHelp = await confirmTaskAuthoring(ctx, initialDraft);
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to confirm task authoring"), "error");
+      return;
+    }
+
+    if (wantsTaskAuthoringHelp) {
+      if (!requestTaskAuthoringAssistance) {
+        ctx.ui.notify("Task authoring assistance is unavailable", "error");
+        return;
+      }
+
+      let authoredDraft: TaskAuthoringResult | null;
+      try {
+        authoredDraft = await requestTaskAuthoringAssistance(ctx, initialDraft);
+      } catch (error) {
+        ctx.ui.notify(formatTasksCommandError(error, "Failed to complete task authoring"), "error");
+        return;
+      }
+
+      if (!authoredDraft) {
+        ctx.ui.notify("Task creation cancelled", "info");
+        return;
+      }
+
+      const authoredTitle = authoredDraft.title.trim();
+      if (authoredTitle.length === 0) {
+        ctx.ui.notify("Task authoring returned an empty title", "error");
+        return;
+      }
+
+      finalDraft = {
+        title: authoredTitle,
+        description: normalizeOptionalTaskDescription(authoredDraft.description ?? ""),
+      };
+    }
 
     let createdTask: TaskDetail;
     try {
       createdTask = await createTask(
         { taskService },
         {
-          title,
+          title: finalDraft.title,
           projectId: projectSelection.project.id,
-          description,
+          description: finalDraft.description,
         }
       );
     } catch (error) {
@@ -457,7 +526,13 @@ const registerCommands = (
 
   pi.registerCommand("task-new", {
     description: "Create a new todu task",
-    handler: createTaskNewCommandHandler(dependencies),
+    handler: createTaskNewCommandHandler({
+      ...dependencies,
+      requestTaskAuthoringAssistance:
+        dependencies.requestTaskAuthoringAssistance ??
+        ((ctx: ExtensionCommandContext, draft: TaskAuthoringDraft) =>
+          requestTaskAuthoringAssistance(pi, ctx, draft)),
+    }),
   });
 };
 
@@ -1010,10 +1085,262 @@ const selectProjectFromList = async (
   });
 };
 
-const editNewTaskDescription = async (
+const editNewTaskExplanation = async (
   ctx: ExtensionCommandContext,
   taskTitle: string
-): Promise<string | undefined> => ctx.ui.editor(`Description (optional) · ${taskTitle}`, "");
+): Promise<string | undefined> =>
+  ctx.ui.editor(`Explain the task in your own words (optional) · ${taskTitle}`, "");
+
+const confirmTaskAuthoringHelp = async (
+  ctx: ExtensionCommandContext,
+  draft: TaskAuthoringDraft
+): Promise<boolean> =>
+  ctx.ui.confirm(
+    "Task authoring",
+    `Do you want help with task authoring before creating ${draft.title} in ${draft.projectName}?`
+  );
+
+const requestTaskAuthoringAssistance = async (
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  draft: TaskAuthoringDraft
+): Promise<TaskAuthoringResult | null> => {
+  let pendingError: Error | null = null;
+
+  const result = await ctx.ui.custom<TaskAuthoringResult | null>(
+    (tui, theme, _keybindings, done) => {
+      const loader = new BorderedLoader(tui, theme, `Refining task draft · ${draft.title}`);
+      let settled = false;
+
+      const settle = (value: TaskAuthoringResult | null): void => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        done(value);
+      };
+
+      loader.onAbort = () => settle(null);
+
+      const commandArgs = ["--mode", "json", "--print", "--no-session", "--no-extensions"];
+
+      if (ctx.model) {
+        commandArgs.push("--model", `${ctx.model.provider}/${ctx.model.id}`);
+      }
+
+      commandArgs.push(buildTaskAuthoringSkillPrompt(draft));
+
+      void pi
+        .exec("pi", commandArgs, { signal: loader.signal, timeout: 120_000 })
+        .then((execResult) => {
+          if (execResult.code !== 0) {
+            const errorOutput = [execResult.stderr, execResult.stdout]
+              .map((value) => value.trim())
+              .find(Boolean);
+            throw new Error(
+              errorOutput ?? `Task authoring subprocess failed with exit code ${execResult.code}`
+            );
+          }
+
+          settle(parseTaskAuthoringResponse(extractAssistantTextFromJsonOutput(execResult.stdout)));
+        })
+        .catch((error: unknown) => {
+          if (loader.signal.aborted) {
+            settle(null);
+            return;
+          }
+
+          pendingError =
+            error instanceof Error ? error : new Error("Task authoring subprocess failed");
+          settle(null);
+        });
+
+      return loader;
+    }
+  );
+
+  if (pendingError) {
+    throw pendingError;
+  }
+
+  return result;
+};
+
+const buildTaskAuthoringSkillPrompt = (draft: TaskAuthoringDraft): string => {
+  const explanation = draft.description ?? "(none provided)";
+
+  return [
+    "/skill:task-authoring",
+    "This is a task authoring request.",
+    "Use task authoring to turn the following rough draft into a finalized task title and markdown description.",
+    "Do not ask follow-up questions. Use only the information provided below.",
+    "Return the result in this exact format:",
+    "Title: <title>",
+    "",
+    "<markdown description>",
+    "",
+    "The title should be 60 characters or fewer.",
+    "",
+    `Project: ${draft.projectName}`,
+    `Draft title: ${draft.title}`,
+    "User explanation:",
+    explanation,
+  ].join("\n");
+};
+
+const extractAssistantTextFromJsonOutput = (output: string): string => {
+  const lines = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    let event: unknown;
+    try {
+      event = JSON.parse(lines[index] ?? "") as unknown;
+    } catch {
+      continue;
+    }
+
+    if (!isRecord(event) || event.type !== "message_end" || !isRecord(event.message)) {
+      continue;
+    }
+
+    const { message } = event;
+    if (message.role !== "assistant" || !Array.isArray(message.content)) {
+      continue;
+    }
+
+    const text = message.content
+      .filter(
+        (block): block is { type: "text"; text: string } =>
+          isRecord(block) && block.type === "text" && typeof block.text === "string"
+      )
+      .map((block) => block.text)
+      .join("\n")
+      .trim();
+
+    if (text.length > 0) {
+      return text;
+    }
+  }
+
+  throw new Error("Task authoring did not return a response");
+};
+
+const parseTaskAuthoringResponse = (responseText: string): TaskAuthoringResult => {
+  const jsonResult = parseTaskAuthoringJsonResponse(responseText);
+  if (jsonResult) {
+    return jsonResult;
+  }
+
+  const formattedResult = parseTaskAuthoringFormattedResponse(responseText);
+  if (formattedResult) {
+    return formattedResult;
+  }
+
+  throw new Error("Task authoring did not return a recognizable title and description");
+};
+
+const parseTaskAuthoringJsonResponse = (responseText: string): TaskAuthoringResult | null => {
+  const rawJson = extractJsonObject(responseText);
+  if (!rawJson) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson) as unknown;
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(parsed)) {
+    return null;
+  }
+
+  const title = parsed.title;
+  if (typeof title !== "string" || title.trim().length === 0) {
+    return null;
+  }
+
+  const description = parsed.description;
+  if (description !== null && description !== undefined && typeof description !== "string") {
+    return null;
+  }
+
+  return {
+    title: title.trim(),
+    description:
+      typeof description === "string" ? normalizeOptionalTaskDescription(description) : null,
+  };
+};
+
+const parseTaskAuthoringFormattedResponse = (responseText: string): TaskAuthoringResult | null => {
+  const normalizedText = responseText.replace(/\r\n/g, "\n").trim();
+  if (normalizedText.length === 0) {
+    return null;
+  }
+
+  const titleMatch = normalizedText.match(/^Title:\s*(.+)$/im);
+  if (titleMatch?.[1]) {
+    const title = titleMatch[1].trim();
+    const description = normalizedText
+      .slice((titleMatch.index ?? 0) + titleMatch[0].length)
+      .replace(/^\s*Description:\s*/i, "")
+      .trim();
+
+    if (title.length === 0) {
+      return null;
+    }
+
+    return {
+      title,
+      description: normalizeOptionalTaskDescription(description),
+    };
+  }
+
+  const firstLineBreak = normalizedText.indexOf("\n");
+  if (firstLineBreak < 0) {
+    return null;
+  }
+
+  const title = normalizedText.slice(0, firstLineBreak).trim();
+  const description = normalizedText.slice(firstLineBreak + 1).trim();
+  if (title.length === 0 || description.length === 0) {
+    return null;
+  }
+
+  if (title.startsWith("#")) {
+    return null;
+  }
+
+  return {
+    title,
+    description: normalizeOptionalTaskDescription(description),
+  };
+};
+
+const extractJsonObject = (value: string): string | null => {
+  const trimmedValue = value.trim();
+  if (trimmedValue.startsWith("{") && trimmedValue.endsWith("}")) {
+    return trimmedValue;
+  }
+
+  const fencedMatch = trimmedValue.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    return fencedMatch[1].trim();
+  }
+
+  const firstBraceIndex = trimmedValue.indexOf("{");
+  const lastBraceIndex = trimmedValue.lastIndexOf("}");
+  if (firstBraceIndex < 0 || lastBraceIndex <= firstBraceIndex) {
+    return null;
+  }
+
+  return trimmedValue.slice(firstBraceIndex, lastBraceIndex + 1);
+};
 
 const normalizeOptionalTaskDescription = (description: string): string | null => {
   const trimmedDescription = description.trim();
@@ -1302,6 +1629,9 @@ const resolveRequestedTaskId = (args: string, currentTaskId: TaskId | null): Tas
   const trimmedArgs = args.trim();
   return trimmedArgs.length > 0 ? trimmedArgs : currentTaskId;
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 const formatTasksCommandError = (error: unknown, prefix: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {

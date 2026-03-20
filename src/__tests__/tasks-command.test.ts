@@ -52,6 +52,7 @@ const createCommandContext = () => ({
     setEditorText: vi.fn(),
     input: vi.fn(),
     editor: vi.fn(),
+    confirm: vi.fn().mockResolvedValue(false),
     custom: vi.fn(),
   },
 });
@@ -478,7 +479,7 @@ describe("createTaskNewCommandHandler", () => {
     const handler = createTaskNewCommandHandler({
       getTaskService: vi.fn().mockResolvedValue(taskService),
       selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
-      editTaskDescription: vi.fn().mockResolvedValue(""),
+      editTaskExplanation: vi.fn().mockResolvedValue(""),
       setCurrentTask,
       openTaskDetail,
     });
@@ -504,7 +505,7 @@ describe("createTaskNewCommandHandler", () => {
       getTaskService: vi.fn().mockResolvedValue(taskService),
       promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
       selectTaskProject: vi.fn().mockResolvedValue({ status: "cancelled" }),
-      editTaskDescription: vi.fn(),
+      editTaskExplanation: vi.fn(),
       openTaskDetail: vi.fn(),
       setCurrentTask: vi.fn(),
     });
@@ -524,7 +525,7 @@ describe("createTaskNewCommandHandler", () => {
       getTaskService: vi.fn().mockResolvedValue(taskService),
       promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
       selectTaskProject: vi.fn().mockResolvedValue({ status: "unavailable" }),
-      editTaskDescription: vi.fn(),
+      editTaskExplanation: vi.fn(),
       openTaskDetail: vi.fn(),
       setCurrentTask: vi.fn(),
     });
@@ -556,7 +557,7 @@ describe("createTaskNewCommandHandler", () => {
       getTaskService: vi.fn().mockResolvedValue(taskService),
       promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
       selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
-      editTaskDescription: vi.fn().mockResolvedValue("Draft the first version"),
+      editTaskExplanation: vi.fn().mockResolvedValue("Draft the first version"),
       setCurrentTask,
       openTaskDetail,
     });
@@ -573,6 +574,70 @@ describe("createTaskNewCommandHandler", () => {
     expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, createdTask.id);
   });
 
+  it("uses task authoring help before creating the task when requested", async () => {
+    const context = createCommandContext();
+    const project = createProjectSummary();
+    const createdTask = createTaskDetail({
+      id: "task-new-1",
+      title: "Improve task authoring flow",
+      projectId: project.id,
+      projectName: project.name,
+    });
+    const taskService = {
+      createTask: vi.fn().mockResolvedValue(createdTask),
+    } as unknown as TaskService;
+    const openTaskDetail = vi.fn().mockResolvedValue(undefined);
+    const handler = createTaskNewCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
+      selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
+      editTaskExplanation: vi.fn().mockResolvedValue("Rough notes from the user"),
+      confirmTaskAuthoring: vi.fn().mockResolvedValue(true),
+      requestTaskAuthoringAssistance: vi.fn().mockResolvedValue({
+        title: "Improve task authoring flow",
+        description: "## Goal\n\nImprove the authoring flow.",
+      }),
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      openTaskDetail,
+    });
+
+    await handler("", context as never);
+
+    expect(taskService.createTask).toHaveBeenCalledWith({
+      title: "Improve task authoring flow",
+      projectId: project.id,
+      description: "## Goal\n\nImprove the authoring flow.",
+    });
+    expect(context.ui.notify).toHaveBeenCalledWith(`Created task ${createdTask.title}`, "info");
+    expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, createdTask.id);
+  });
+
+  it("surfaces task authoring failures with a contextual error", async () => {
+    const context = createCommandContext();
+    const project = createProjectSummary();
+    const taskService = {
+      createTask: vi.fn(),
+    } as unknown as TaskService;
+    const handler = createTaskNewCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
+      selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
+      editTaskExplanation: vi.fn().mockResolvedValue("Rough notes from the user"),
+      confirmTaskAuthoring: vi.fn().mockResolvedValue(true),
+      requestTaskAuthoringAssistance: vi.fn().mockRejectedValue(new Error("model unavailable")),
+      setCurrentTask: vi.fn().mockResolvedValue(undefined),
+      openTaskDetail: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await handler("", context as never);
+
+    expect(taskService.createTask).not.toHaveBeenCalled();
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      "Failed to complete task authoring: model unavailable",
+      "error"
+    );
+  });
+
   it("surfaces creation failures with a contextual error", async () => {
     const context = createCommandContext();
     const project = createProjectSummary();
@@ -583,7 +648,7 @@ describe("createTaskNewCommandHandler", () => {
       getTaskService: vi.fn().mockResolvedValue(taskService),
       promptTaskTitle: vi.fn().mockResolvedValue("Implement /task-new"),
       selectTaskProject: vi.fn().mockResolvedValue({ status: "selected", project }),
-      editTaskDescription: vi.fn().mockResolvedValue(""),
+      editTaskExplanation: vi.fn().mockResolvedValue(""),
       setCurrentTask: vi.fn().mockResolvedValue(undefined),
       openTaskDetail: vi.fn().mockResolvedValue(undefined),
     });
