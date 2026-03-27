@@ -4,7 +4,7 @@ Status: ready-for-tasking
 Owner: unassigned
 Related architecture: docs/architecture.md#command-and-tool-boundaries
 Related tasks: task-a4ac681c, task-d6ae16f2, task-77d71043, task-2bec9ed4
-Last updated: 2026-03-19
+Last updated: 2026-03-27
 
 ## Problem
 
@@ -56,6 +56,8 @@ Planned V1 tools:
 - `project_list`
 
 V1 should use one consistent domain-first snake_case convention such as `task_list` and `project_list`, matching the architecture examples.
+
+Dedicated follow-on project planning lives in `docs/plans/project-agent-tools.md`.
 
 ### Main flow
 
