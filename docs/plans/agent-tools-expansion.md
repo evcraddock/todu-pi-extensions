@@ -4,7 +4,7 @@ Status: draft
 Owner: unassigned
 Related architecture: docs/architecture.md#command-and-tool-boundaries
 Related tasks: task-98a5a796, task-068cdeb7
-Last updated: 2026-03-19
+Last updated: 2026-03-27
 
 ## Problem
 
@@ -17,6 +17,8 @@ Those remaining skills are still good tool candidates in principle, but they fal
 - habit and recurring skills need entirely new domain and service layers inside this repository
 
 Without a plan for these later waves, `agent-tools-v1.md` could stall at a narrow subset while the rest of `todu-skills` remains permanently external.
+
+Project-specific native tool boundaries now have a dedicated plan in `docs/plans/project-agent-tools.md`, so this document should stay focused on broader later-wave inventory and non-project domains.
 
 ## Goal
 
