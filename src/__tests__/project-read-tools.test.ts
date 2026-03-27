@@ -5,7 +5,10 @@ import { registerTools } from "@/extension/register-tools";
 import type { TaskService } from "@/services/task-service";
 import {
   createProjectListToolDefinition,
+  createProjectShowToolDefinition,
   formatProjectListContent,
+  formatProjectShowContent,
+  resolveProjectByRef,
 } from "@/tools/project-read-tools";
 
 const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
@@ -36,6 +39,7 @@ describe("registerTools", () => {
         "task_update",
         "task_comment_create",
         "project_list",
+        "project_show",
       ])
     );
   });
@@ -51,6 +55,62 @@ describe("formatProjectListContent", () => {
         empty: false,
       })
     ).toContain("proj-1 • Todu Pi Extensions • active • medium");
+  });
+});
+
+describe("formatProjectShowContent", () => {
+  it("formats concise project detail output", () => {
+    expect(formatProjectShowContent(createProjectSummary())).toContain(
+      "Project proj-1: Todu Pi Extensions"
+    );
+  });
+});
+
+describe("resolveProjectByRef", () => {
+  it("returns a direct project match by ID first", async () => {
+    const project = createProjectSummary();
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listProjects: vi.fn(),
+    } as unknown as TaskService;
+
+    await expect(resolveProjectByRef(taskService, project.id)).resolves.toEqual(project);
+    expect(taskService.getProject).toHaveBeenCalledWith(project.id);
+    expect(taskService.listProjects).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a unique project-name match", async () => {
+    const project = createProjectSummary();
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([project]),
+    } as unknown as TaskService;
+
+    await expect(resolveProjectByRef(taskService, project.name)).resolves.toEqual(project);
+    expect(taskService.getProject).toHaveBeenCalledWith(project.name);
+    expect(taskService.listProjects).toHaveBeenCalledWith();
+  });
+
+  it("returns null when no project matches the ref", async () => {
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([]),
+    } as unknown as TaskService;
+
+    await expect(resolveProjectByRef(taskService, "missing-project")).resolves.toBeNull();
+  });
+
+  it("fails clearly when name matching is ambiguous", async () => {
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi
+        .fn()
+        .mockResolvedValue([createProjectSummary(), createProjectSummary({ id: "proj-2" })]),
+    } as unknown as TaskService;
+
+    await expect(resolveProjectByRef(taskService, "Todu Pi Extensions")).rejects.toThrow(
+      "project_show found multiple projects named: Todu Pi Extensions"
+    );
   });
 });
 
@@ -106,6 +166,100 @@ describe("createProjectListToolDefinition", () => {
 
     await expect(tool.execute("tool-call-1", {})).rejects.toThrow(
       "project_list failed: daemon unavailable"
+    );
+  });
+});
+
+describe("createProjectShowToolDefinition", () => {
+  it("returns project detail with a structured found result for ID lookups", async () => {
+    const project = createProjectSummary();
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listProjects: vi.fn(),
+    } as unknown as TaskService;
+    const tool = createProjectShowToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tool-call-1", { projectRef: project.id });
+
+    expect(taskService.getProject).toHaveBeenCalledWith(project.id);
+    expect(taskService.listProjects).not.toHaveBeenCalled();
+    expect(result.content[0]?.text).toContain(`Project ${project.id}: ${project.name}`);
+    expect(result.details).toEqual({
+      kind: "project_show",
+      projectRef: project.id,
+      found: true,
+      project,
+    });
+  });
+
+  it("returns project detail with a structured found result for unique name lookups", async () => {
+    const project = createProjectSummary();
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([project]),
+    } as unknown as TaskService;
+    const tool = createProjectShowToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tool-call-1", { projectRef: project.name });
+
+    expect(taskService.getProject).toHaveBeenCalledWith(project.name);
+    expect(taskService.listProjects).toHaveBeenCalledWith();
+    expect(result.content[0]?.text).toContain(`Project ${project.id}: ${project.name}`);
+    expect(result.details).toEqual({
+      kind: "project_show",
+      projectRef: project.name,
+      found: true,
+      project,
+    });
+  });
+
+  it("returns a non-error not-found result when the project is missing", async () => {
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([]),
+    } as unknown as TaskService;
+    const tool = createProjectShowToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tool-call-1", { projectRef: "missing-project" });
+
+    expect(result.content[0]?.text).toBe("Project not found: missing-project");
+    expect(result.details).toEqual({
+      kind: "project_show",
+      projectRef: "missing-project",
+      found: false,
+    });
+  });
+
+  it("surfaces ambiguous project-name matches clearly", async () => {
+    const tool = createProjectShowToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue({
+        getProject: vi.fn().mockResolvedValue(null),
+        listProjects: vi
+          .fn()
+          .mockResolvedValue([createProjectSummary(), createProjectSummary({ id: "proj-2" })]),
+      } as unknown as TaskService),
+    });
+
+    await expect(tool.execute("tool-call-1", { projectRef: "Todu Pi Extensions" })).rejects.toThrow(
+      "project_show failed: project_show found multiple projects named: Todu Pi Extensions"
+    );
+  });
+
+  it("surfaces service failures with tool-specific context", async () => {
+    const tool = createProjectShowToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue({
+        getProject: vi.fn().mockRejectedValue(new Error("daemon unavailable")),
+      } as unknown as TaskService),
+    });
+
+    await expect(tool.execute("tool-call-1", { projectRef: "proj-1" })).rejects.toThrow(
+      "project_show failed: daemon unavailable"
     );
   });
 });

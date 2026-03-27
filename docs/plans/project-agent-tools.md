@@ -111,7 +111,7 @@ Planned native project tool areas:
 ### Error, empty, and cancel states
 
 - `project_list` should treat an empty result as a successful non-error outcome.
-- `project_show` should return an explicit not-found result instead of throwing for missing project IDs.
+- `project_show` should return an explicit not-found result instead of throwing for missing project references.
 - `project_create` and `project_update` should fail fast on invalid inputs instead of guessing field values.
 - `project_delete` should report explicit success or explicit not-found behavior and surface backend refusal clearly if tasks or related data block deletion.
 - `project_check` should report ambiguous or missing repo context clearly.
@@ -375,19 +375,21 @@ Behavior:
 
 Purpose:
 
-- show one project by explicit project ID
+- show one project by explicit project reference
 
 Parameters:
 
-- `projectId: string`
+- `projectRef: string` — project ID or unique project name
 
 Result shape:
 
-- `details: { kind: "project_show", projectId, found, project? }`
+- `details: { kind: "project_show", projectRef, found, project? }`
 
 Behavior:
 
+- resolve by project ID first, then fall back to unique name matching
 - missing project returns `found: false` instead of throwing
+- ambiguous name matches fail clearly instead of guessing
 - service failures throw normal tool errors
 - response should stay focused on project metadata, not embed a full task browser
 
