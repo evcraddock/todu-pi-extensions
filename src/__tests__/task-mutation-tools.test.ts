@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { TaskComment, TaskDetail } from "@/domain/task";
+import type { ProjectSummary, TaskComment, TaskDetail } from "@/domain/task";
 import { registerTools } from "@/extension/register-tools";
 import type { TaskService } from "@/services/task-service";
 import {
@@ -10,6 +10,8 @@ import {
   normalizeCreateTaskInput,
   normalizeTaskCommentInput,
   normalizeUpdateTaskInput,
+  resolveCreateTaskInput,
+  resolveProjectForTaskCreate,
 } from "@/tools/task-mutation-tools";
 
 const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
@@ -31,6 +33,15 @@ const createTaskComment = (overrides: Partial<TaskComment> = {}): TaskComment =>
   author: "user",
   createdAt: "2026-03-19T00:00:00.000Z",
   content: "Looks good",
+  ...overrides,
+});
+
+const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
+  id: "proj-1",
+  name: "Todu Pi Extensions",
+  status: "active",
+  priority: "medium",
+  description: "Primary project",
   ...overrides,
 });
 
@@ -133,11 +144,85 @@ describe("normalizeTaskCommentInput", () => {
   });
 });
 
+describe("resolveProjectForTaskCreate", () => {
+  it("returns a direct project match by ID first", async () => {
+    const project = createProjectSummary();
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listProjects: vi.fn(),
+    } as unknown as TaskService;
+
+    await expect(resolveProjectForTaskCreate(taskService, project.id)).resolves.toEqual(project);
+    expect(taskService.getProject).toHaveBeenCalledWith(project.id);
+    expect(taskService.listProjects).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a unique project-name match", async () => {
+    const project = createProjectSummary();
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([project]),
+    } as unknown as TaskService;
+
+    await expect(resolveProjectForTaskCreate(taskService, project.name)).resolves.toEqual(project);
+    expect(taskService.getProject).toHaveBeenCalledWith(project.name);
+    expect(taskService.listProjects).toHaveBeenCalledWith();
+  });
+
+  it("fails clearly when the project name does not match anything", async () => {
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([]),
+    } as unknown as TaskService;
+
+    await expect(resolveProjectForTaskCreate(taskService, "missing-project")).rejects.toThrow(
+      "project not found: missing-project"
+    );
+  });
+
+  it("fails clearly when the project-name match is ambiguous", async () => {
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi
+        .fn()
+        .mockResolvedValue([createProjectSummary(), createProjectSummary({ id: "proj-2" })]),
+    } as unknown as TaskService;
+
+    await expect(
+      resolveProjectForTaskCreate(taskService, "Todu Pi Extensions")
+    ).rejects.toThrow("multiple projects matched: Todu Pi Extensions");
+  });
+});
+
+describe("resolveCreateTaskInput", () => {
+  it("replaces a unique project name with the resolved project ID", async () => {
+    const project = createProjectSummary();
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([project]),
+    } as unknown as TaskService;
+
+    await expect(
+      resolveCreateTaskInput(taskService, {
+        title: "Implement mutation tools",
+        projectId: project.name,
+        description: "Add create, update, and comment tools.",
+      })
+    ).resolves.toEqual({
+      title: "Implement mutation tools",
+      projectId: project.id,
+      description: "Add create, update, and comment tools.",
+    });
+  });
+});
+
 describe("createTaskCreateToolDefinition", () => {
   it("creates a task and returns structured details", async () => {
     const task = createTaskDetail();
     const taskService = {
       createTask: vi.fn().mockResolvedValue(task),
+      getProject: vi.fn().mockResolvedValue(createProjectSummary()),
+      listProjects: vi.fn(),
     } as unknown as TaskService;
     const tool = createTaskCreateToolDefinition({
       getTaskService: vi.fn().mockResolvedValue(taskService),
@@ -179,9 +264,68 @@ describe("createTaskCreateToolDefinition", () => {
     ).rejects.toThrow("task_create failed: title is required");
   });
 
+  it("resolves a unique project name before creating the task", async () => {
+    const project = createProjectSummary();
+    const task = createTaskDetail({ projectId: project.id, projectName: project.name });
+    const taskService = {
+      createTask: vi.fn().mockResolvedValue(task),
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([project]),
+    } as unknown as TaskService;
+    const tool = createTaskCreateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    await tool.execute("tool-call-1", {
+      title: "Implement mutation tools",
+      projectId: project.name,
+    });
+
+    expect(taskService.createTask).toHaveBeenCalledWith({
+      title: "Implement mutation tools",
+      projectId: project.id,
+      description: undefined,
+    });
+  });
+
+  it("fails clearly when the project name is missing", async () => {
+    const tool = createTaskCreateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue({
+        getProject: vi.fn().mockResolvedValue(null),
+        listProjects: vi.fn().mockResolvedValue([]),
+      } as unknown as TaskService),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", {
+        title: "Implement mutation tools",
+        projectId: "missing-project",
+      })
+    ).rejects.toThrow("task_create failed: project not found: missing-project");
+  });
+
+  it("fails clearly when the project name is ambiguous", async () => {
+    const tool = createTaskCreateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue({
+        getProject: vi.fn().mockResolvedValue(null),
+        listProjects: vi
+          .fn()
+          .mockResolvedValue([createProjectSummary(), createProjectSummary({ id: "proj-2" })]),
+      } as unknown as TaskService),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", {
+        title: "Implement mutation tools",
+        projectId: "Todu Pi Extensions",
+      })
+    ).rejects.toThrow("task_create failed: multiple projects matched: Todu Pi Extensions");
+  });
+
   it("surfaces service failures with tool-specific context", async () => {
     const tool = createTaskCreateToolDefinition({
       getTaskService: vi.fn().mockResolvedValue({
+        getProject: vi.fn().mockResolvedValue(createProjectSummary()),
         createTask: vi.fn().mockRejectedValue(new Error("daemon unavailable")),
       } as unknown as TaskService),
     });

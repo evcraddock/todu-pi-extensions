@@ -2,7 +2,14 @@ import { StringEnum } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
-import type { TaskComment, TaskDetail, TaskId, TaskPriority, TaskStatus } from "../domain/task";
+import type {
+  ProjectSummary,
+  TaskComment,
+  TaskDetail,
+  TaskId,
+  TaskPriority,
+  TaskStatus,
+} from "../domain/task";
 import { commentOnTask } from "../flows/comment-on-task";
 import { createTask } from "../flows/create-task";
 import { updateTask } from "../flows/update-task";
@@ -18,7 +25,7 @@ const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
 
 const TaskCreateParams = Type.Object({
   title: Type.String({ description: "Task title" }),
-  projectId: Type.String({ description: "Project ID for the new task" }),
+  projectId: Type.String({ description: "Project ID or unique project name for the new task" }),
   description: Type.Optional(Type.String({ description: "Optional task description" })),
 });
 
@@ -87,17 +94,19 @@ interface TaskMutationToolDependencies {
 const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
   name: "task_create",
   label: "Task Create",
-  description: "Create a task with a title, project ID, and optional description.",
-  promptSnippet: "Create a task when the title and explicit projectId are known.",
+  description: "Create a task with a title, project reference, and optional description.",
+  promptSnippet: "Create a task when the title and project reference are known.",
   promptGuidelines: [
     "Use this tool for backend task creation in normal chat instead of interactive slash-command flows.",
-    "Provide an explicit projectId and do not guess it.",
+    "Provide an explicit project ID when known.",
+    "If only a project name is available, pass the exact unique project name so the tool can resolve it.",
+    "Do not guess project identity.",
   ],
   parameters: TaskCreateParams,
   async execute(_toolCallId: string, params: TaskCreateToolParams) {
     try {
-      const input = normalizeCreateTaskInput(params);
       const taskService = await getTaskService();
+      const input = await resolveCreateTaskInput(taskService, params);
       const task = await createTask({ taskService }, input);
       const details: TaskCreateToolDetails = {
         kind: "task_create",
@@ -193,6 +202,49 @@ const normalizeCreateTaskInput = (params: TaskCreateToolParams): CreateTaskInput
   projectId: normalizeRequiredText(params.projectId, "projectId"),
   description: normalizeOptionalDescription(params, "description"),
 });
+
+const resolveCreateTaskInput = async (
+  taskService: TaskService,
+  params: TaskCreateToolParams
+): Promise<CreateTaskInput> => {
+  const input = normalizeCreateTaskInput(params);
+  const project = await resolveProjectForTaskCreate(
+    taskService,
+    normalizeRequiredText(input.projectId ?? "", "projectId")
+  );
+
+  return {
+    ...input,
+    projectId: project.id,
+  };
+};
+
+const resolveProjectForTaskCreate = async (
+  taskService: TaskService,
+  projectRef: string
+): Promise<ProjectSummary> => {
+  const project = await taskService.getProject(projectRef);
+  if (project) {
+    return project;
+  }
+
+  const projects = await taskService.listProjects();
+  const nameMatches = projects.filter((candidate) => candidate.name === projectRef);
+  if (nameMatches.length === 0) {
+    throw new Error(`project not found: ${projectRef}`);
+  }
+
+  if (nameMatches.length > 1) {
+    throw new Error(`multiple projects matched: ${projectRef}`);
+  }
+
+  const matchedProject = nameMatches[0];
+  if (!matchedProject) {
+    throw new Error(`project not found: ${projectRef}`);
+  }
+
+  return matchedProject;
+};
 
 const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput => {
   const input: UpdateTaskInput = {
@@ -304,4 +356,6 @@ export {
   normalizeTaskCommentInput,
   normalizeUpdateTaskInput,
   registerTaskMutationTools,
+  resolveCreateTaskInput,
+  resolveProjectForTaskCreate,
 };
