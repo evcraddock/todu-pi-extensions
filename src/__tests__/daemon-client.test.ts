@@ -258,6 +258,182 @@ describe("createToduDaemonClient", () => {
     });
   });
 
+  it("creates projects through project.create", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "proj-1",
+        name: "Created Project",
+        status: "active",
+        priority: "high",
+        description: "Created from tests",
+        createdAt: "2026-03-19T00:00:00.000Z",
+        updatedAt: "2026-03-19T00:00:00.000Z",
+      },
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(
+      client.createProject({
+        name: "Created Project",
+        description: "Created from tests",
+        priority: "high",
+      })
+    ).resolves.toEqual({
+      id: "proj-1",
+      name: "Created Project",
+      status: "active",
+      priority: "high",
+      description: "Created from tests",
+    });
+    expect(connection.request).toHaveBeenCalledWith("project.create", {
+      input: {
+        name: "Created Project",
+        description: "Created from tests",
+        priority: "high",
+      },
+    });
+  });
+
+  it("updates projects through project.update", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "proj-1",
+        name: "Updated Project",
+        status: "canceled",
+        priority: "low",
+        description: "Updated from tests",
+        createdAt: "2026-03-19T00:00:00.000Z",
+        updatedAt: "2026-03-20T00:00:00.000Z",
+      },
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(
+      client.updateProject({
+        projectId: "proj-1",
+        name: "Updated Project",
+        description: "Updated from tests",
+        status: "cancelled",
+        priority: "low",
+      })
+    ).resolves.toEqual({
+      id: "proj-1",
+      name: "Updated Project",
+      status: "cancelled",
+      priority: "low",
+      description: "Updated from tests",
+    });
+    expect(connection.request).toHaveBeenCalledWith("project.update", {
+      id: "proj-1",
+      input: {
+        name: "Updated Project",
+        description: "Updated from tests",
+        status: "canceled",
+        priority: "low",
+      },
+    });
+  });
+
+  it("deletes projects through project.delete", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: null,
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.deleteProject("proj-1")).resolves.toEqual({
+      projectId: "proj-1",
+      deleted: true,
+    });
+    expect(connection.request).toHaveBeenCalledWith("project.delete", { id: "proj-1" });
+  });
+
+  it("maps project mutation failures into client errors", async () => {
+    const connection = createConnectionMock();
+    connection.request
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: "CONFLICT",
+          message: "duplicate project name",
+          details: { name: "Created Project" },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: "NOT_FOUND",
+          message: "project not found",
+          details: { id: "proj-missing" },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "invalid project update",
+          details: { field: "status" },
+        },
+      });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.createProject({ name: "Created Project" })).rejects.toEqual(
+      expect.objectContaining({
+        name: "ToduDaemonClientError",
+        code: "conflict",
+        method: "project.create",
+        message: "project.create failed (CONFLICT): duplicate project name",
+      })
+    );
+    await expect(
+      client.updateProject({ projectId: "proj-missing", name: "Updated Project" })
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "ToduDaemonClientError",
+        code: "not-found",
+        method: "project.update",
+        message: "project.update failed (NOT_FOUND): project not found",
+      })
+    );
+    await expect(client.deleteProject("proj-1")).rejects.toEqual(
+      expect.objectContaining({
+        name: "ToduDaemonClientError",
+        code: "validation",
+        method: "project.delete",
+        message: "project.delete failed (VALIDATION_ERROR): invalid project update",
+      })
+    );
+  });
+
   it("adapts event subscriptions through the connection manager", async () => {
     const connection = createConnectionMock();
     const subscription = { unsubscribe: vi.fn() };

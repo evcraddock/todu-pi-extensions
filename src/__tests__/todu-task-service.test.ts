@@ -33,6 +33,9 @@ describe("createToduTaskService", () => {
       addTaskComment: vi.fn(),
       listProjects: vi.fn().mockResolvedValue([project]),
       getProject: vi.fn().mockResolvedValue(project),
+      createProject: vi.fn(),
+      updateProject: vi.fn(),
+      deleteProject: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -75,6 +78,9 @@ describe("createToduTaskService", () => {
       addTaskComment: vi.fn(),
       listProjects: vi.fn(),
       getProject: vi.fn().mockResolvedValue(project),
+      createProject: vi.fn(),
+      updateProject: vi.fn(),
+      deleteProject: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -120,6 +126,9 @@ describe("createToduTaskService", () => {
       addTaskComment: vi.fn(),
       listProjects: vi.fn().mockResolvedValue([]),
       getProject: vi.fn().mockResolvedValue(null),
+      createProject: vi.fn(),
+      updateProject: vi.fn(),
+      deleteProject: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -170,6 +179,9 @@ describe("createToduTaskService", () => {
         )
         .mockResolvedValueOnce([project]),
       getProject: vi.fn().mockResolvedValue(project),
+      createProject: vi.fn(),
+      updateProject: vi.fn(),
+      deleteProject: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -231,6 +243,9 @@ describe("createToduTaskService", () => {
           })
         )
         .mockResolvedValueOnce(project),
+      createProject: vi.fn(),
+      updateProject: vi.fn(),
+      deleteProject: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };

@@ -8,6 +8,7 @@ import type {
 } from "@todu/core";
 
 import type {
+  ProjectSummary,
   TaskComment,
   TaskDetail,
   TaskFilter,
@@ -16,6 +17,11 @@ import type {
   TaskStatus,
   TaskSummary,
 } from "../../domain/task";
+import type {
+  CreateProjectInput,
+  DeleteProjectResult,
+  UpdateProjectInput as UpdateLocalProjectInput,
+} from "../project-service";
 import type { AddTaskCommentInput, CreateTaskInput, UpdateTaskInput } from "../task-service";
 import type { ToduDaemonConnection, ToduDaemonConnectionError } from "./daemon-connection";
 import type {
@@ -69,6 +75,9 @@ export interface ToduDaemonClient {
   addTaskComment(input: AddTaskCommentInput): Promise<TaskComment>;
   listProjects(): Promise<ToduProjectSummary[]>;
   getProject(projectId: string): Promise<ToduProjectSummary | null>;
+  createProject(input: CreateProjectInput): Promise<ToduProjectSummary>;
+  updateProject(input: UpdateLocalProjectInput): Promise<ToduProjectSummary>;
+  deleteProject(projectId: string): Promise<DeleteProjectResult>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
   on(
     eventName: ToduDaemonEventName,
@@ -163,6 +172,41 @@ const createToduDaemonClient = ({
     return mapProjectSummary(result.value);
   },
 
+  async createProject(input: CreateProjectInput): Promise<ToduProjectSummary> {
+    const result = await connection.request<ToduProject>("project.create", {
+      input: mapCreateProjectInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("project.create", result.error);
+    }
+
+    return mapProjectSummary(result.value);
+  },
+
+  async updateProject(input: UpdateLocalProjectInput): Promise<ToduProjectSummary> {
+    const result = await connection.request<ToduProject>("project.update", {
+      id: input.projectId,
+      input: mapUpdateProjectInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("project.update", result.error);
+    }
+
+    return mapProjectSummary(result.value);
+  },
+
+  async deleteProject(projectId: string): Promise<DeleteProjectResult> {
+    const result = await connection.request<null>("project.delete", { id: projectId });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("project.delete", result.error);
+    }
+
+    return {
+      projectId,
+      deleted: true,
+    };
+  },
+
   async listTaskComments(taskId: TaskId): Promise<TaskComment[]> {
     return fetchTaskComments(connection, taskId);
   },
@@ -251,6 +295,19 @@ const mapProjectSummary = (project: ToduProject): ToduProjectSummary => ({
   status: toLocalProjectStatus(project.status),
   priority: toLocalTaskPriority(project.priority),
   description: project.description ?? null,
+});
+
+const mapCreateProjectInput = (input: CreateProjectInput): Record<string, unknown> => ({
+  name: input.name,
+  description: input.description ?? undefined,
+  priority: input.priority ?? undefined,
+});
+
+const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, unknown> => ({
+  name: input.name ?? undefined,
+  description: input.description ?? undefined,
+  status: input.status ? toRemoteProjectStatus(input.status) : undefined,
+  priority: input.priority ?? undefined,
 });
 
 const mapTaskFilter = (filter: TaskFilter): Record<string, unknown> => {
@@ -361,9 +418,15 @@ const toLocalTaskPriority = (priority: ToduTaskPriority): TaskPriority => priori
 
 const toRemoteTaskPriority = (priority: TaskPriority): ToduTaskPriority => priority;
 
+const toRemoteProjectStatus = (status: ProjectSummary["status"]): string =>
+  status === "cancelled" ? "canceled" : status;
+
 export {
   createToduDaemonClient,
+  mapCreateProjectInput,
   mapDaemonErrorToClientError,
+  mapUpdateProjectInput,
   toLocalTaskStatus,
+  toRemoteProjectStatus,
   toRemoteTaskStatus,
 };
