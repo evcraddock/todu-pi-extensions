@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
 import type { ProjectSummary } from "../domain/task";
-import type { TaskService } from "../services/task-service";
+import type { ProjectService } from "../services/project-service";
 
 const ProjectListParams = Type.Object({});
 const ProjectShowParams = Type.Object({
@@ -29,10 +29,10 @@ interface ProjectShowToolParams {
 }
 
 interface ProjectReadToolDependencies {
-  getTaskService: () => Promise<TaskService>;
+  getProjectService: () => Promise<ProjectService>;
 }
 
-const createProjectListToolDefinition = ({ getTaskService }: ProjectReadToolDependencies) => ({
+const createProjectListToolDefinition = ({ getProjectService }: ProjectReadToolDependencies) => ({
   name: "project_list",
   label: "Project List",
   description: "List projects.",
@@ -44,8 +44,8 @@ const createProjectListToolDefinition = ({ getTaskService }: ProjectReadToolDepe
   parameters: ProjectListParams,
   async execute(_toolCallId: string, _params: Record<string, never>) {
     try {
-      const taskService = await getTaskService();
-      const projects = await taskService.listProjects();
+      const projectService = await getProjectService();
+      const projects = await projectService.listProjects();
       const details: ProjectListToolDetails = {
         kind: "project_list",
         projects,
@@ -63,7 +63,7 @@ const createProjectListToolDefinition = ({ getTaskService }: ProjectReadToolDepe
   },
 });
 
-const createProjectShowToolDefinition = ({ getTaskService }: ProjectReadToolDependencies) => ({
+const createProjectShowToolDefinition = ({ getProjectService }: ProjectReadToolDependencies) => ({
   name: "project_show",
   label: "Project Show",
   description: "Show project details by ID or unique name.",
@@ -78,8 +78,8 @@ const createProjectShowToolDefinition = ({ getTaskService }: ProjectReadToolDepe
     const projectRef = normalizeRequiredText(params.projectRef, "projectRef");
 
     try {
-      const taskService = await getTaskService();
-      const project = await resolveProjectByRef(taskService, projectRef);
+      const projectService = await getProjectService();
+      const project = await resolveProjectByRef(projectService, projectRef);
       if (!project) {
         const details: ProjectShowToolDetails = {
           kind: "project_show",
@@ -119,15 +119,15 @@ const registerProjectReadTools = (
 };
 
 const resolveProjectByRef = async (
-  taskService: TaskService,
+  projectService: ProjectService,
   projectRef: string
 ): Promise<ProjectSummary | null> => {
-  const project = await taskService.getProject(projectRef);
+  const project = await projectService.getProject(projectRef);
   if (project) {
     return project;
   }
 
-  const projects = await taskService.listProjects();
+  const projects = await projectService.listProjects();
   const nameMatches = projects.filter((candidate) => candidate.name === projectRef);
   if (nameMatches.length === 0) {
     return null;

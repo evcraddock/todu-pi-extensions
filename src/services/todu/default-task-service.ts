@@ -1,3 +1,4 @@
+import type { ProjectService } from "../project-service";
 import type { TaskService } from "../task-service";
 import { createToduDaemonClient, type ToduDaemonClient } from "./daemon-client";
 import {
@@ -5,6 +6,7 @@ import {
   type CreateToduDaemonConnectionOptions,
   type ToduDaemonConnection,
 } from "./daemon-connection";
+import { createToduProjectService } from "./todu-project-service";
 import { createToduTaskService } from "./todu-task-service";
 
 export const DEFAULT_TODU_INITIAL_CONNECT_TIMEOUT_MS = 2_000;
@@ -13,7 +15,9 @@ export interface ToduTaskServiceRuntime {
   connection: ToduDaemonConnection;
   client: ToduDaemonClient;
   taskService: TaskService;
+  projectService: ProjectService;
   ensureConnected(): Promise<TaskService>;
+  ensureProjectServiceConnected(): Promise<ProjectService>;
   disconnect(): Promise<void>;
 }
 
@@ -27,6 +31,7 @@ const createToduTaskServiceRuntime = (
   const connection = createToduDaemonConnection(options);
   const client = createToduDaemonClient({ connection });
   const taskService = createToduTaskService({ client });
+  const projectService = createToduProjectService({ client });
   const initialConnectTimeoutMs = normalizeTimeout(
     options.initialConnectTimeoutMs,
     DEFAULT_TODU_INITIAL_CONNECT_TIMEOUT_MS
@@ -36,12 +41,20 @@ const createToduTaskServiceRuntime = (
     connection,
     client,
     taskService,
+    projectService,
     ensureConnected: async () => {
       if (connection.getState().status !== "connected") {
         await connectWithinTimeout(connection, initialConnectTimeoutMs);
       }
 
       return taskService;
+    },
+    ensureProjectServiceConnected: async () => {
+      if (connection.getState().status !== "connected") {
+        await connectWithinTimeout(connection, initialConnectTimeoutMs);
+      }
+
+      return projectService;
     },
     disconnect: () => connection.disconnect(),
   };

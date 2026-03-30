@@ -35,6 +35,8 @@ export interface TaskService {
   createTask(input: CreateTaskInput): Promise<TaskDetail>;
   updateTask(input: UpdateTaskInput): Promise<TaskDetail>;
   addTaskComment(input: AddTaskCommentInput): Promise<TaskComment>;
+  // Project reads remain here as compatibility support for existing task flows.
+  // Future project-specific work should prefer ProjectService.
   listProjects(): Promise<ProjectSummary[]>;
   getProject(projectId: string): Promise<ProjectSummary | null>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
