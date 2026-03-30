@@ -41,6 +41,9 @@ describe("registerTools", () => {
         "task_comment_create",
         "project_list",
         "project_show",
+        "project_create",
+        "project_update",
+        "project_delete",
       ])
     );
   });
