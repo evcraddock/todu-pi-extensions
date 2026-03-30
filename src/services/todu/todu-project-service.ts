@@ -1,5 +1,9 @@
-import type { ProjectSummary } from "../../domain/task";
-import type { ProjectService } from "../project-service";
+import type {
+  CreateProjectInput,
+  DeleteProjectResult,
+  ProjectService,
+  UpdateProjectInput,
+} from "../project-service";
 import { ToduDaemonClientError, type ToduDaemonClient } from "./daemon-client";
 
 export class ToduProjectServiceError extends Error {
@@ -30,6 +34,12 @@ const createToduProjectService = ({ client }: ToduProjectServiceDependencies): P
   listProjects: () => runProjectServiceOperation("listProjects", () => client.listProjects()),
   getProject: (projectId) =>
     runProjectServiceOperation("getProject", () => client.getProject(projectId)),
+  createProject: (input) =>
+    runProjectServiceOperation("createProject", () => client.createProject(input)),
+  updateProject: (input) =>
+    runProjectServiceOperation("updateProject", () => client.updateProject(input)),
+  deleteProject: (projectId) =>
+    runProjectServiceOperation("deleteProject", () => client.deleteProject(projectId)),
 });
 
 const runProjectServiceOperation = async <TProjectResult>(
@@ -53,7 +63,24 @@ const runProjectServiceOperation = async <TProjectResult>(
   }
 };
 
-const listProjects = async (projectService: ProjectService): Promise<ProjectSummary[]> =>
-  projectService.listProjects();
+const listProjects = async (projectService: ProjectService) => projectService.listProjects();
 
-export { createToduProjectService, listProjects, runProjectServiceOperation };
+const createProject = async (projectService: ProjectService, input: CreateProjectInput) =>
+  projectService.createProject(input);
+
+const updateProject = async (projectService: ProjectService, input: UpdateProjectInput) =>
+  projectService.updateProject(input);
+
+const deleteProject = async (
+  projectService: ProjectService,
+  projectId: string
+): Promise<DeleteProjectResult> => projectService.deleteProject(projectId);
+
+export {
+  createProject,
+  createToduProjectService,
+  deleteProject,
+  listProjects,
+  runProjectServiceOperation,
+  updateProject,
+};
