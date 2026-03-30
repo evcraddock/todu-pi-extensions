@@ -188,9 +188,9 @@ describe("resolveProjectForTaskCreate", () => {
         .mockResolvedValue([createProjectSummary(), createProjectSummary({ id: "proj-2" })]),
     } as unknown as TaskService;
 
-    await expect(
-      resolveProjectForTaskCreate(taskService, "Todu Pi Extensions")
-    ).rejects.toThrow("multiple projects matched: Todu Pi Extensions");
+    await expect(resolveProjectForTaskCreate(taskService, "Todu Pi Extensions")).rejects.toThrow(
+      "multiple projects matched: Todu Pi Extensions"
+    );
   });
 });
 

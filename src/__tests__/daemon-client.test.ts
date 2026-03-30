@@ -434,6 +434,163 @@ describe("createToduDaemonClient", () => {
     );
   });
 
+  it("lists integration bindings through integration.list", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "ibind-1",
+          provider: "github",
+          projectId: "proj-1",
+          targetKind: "repository",
+          targetRef: "evcraddock/todu-pi-extensions",
+          strategy: "bidirectional",
+          enabled: true,
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.listIntegrationBindings({ provider: "github" })).resolves.toEqual([
+      {
+        id: "ibind-1",
+        provider: "github",
+        projectId: "proj-1",
+        targetKind: "repository",
+        targetRef: "evcraddock/todu-pi-extensions",
+        strategy: "bidirectional",
+        enabled: true,
+        options: undefined,
+        createdAt: "2026-03-19T00:00:00.000Z",
+        updatedAt: "2026-03-19T00:00:00.000Z",
+      },
+    ]);
+    expect(connection.request).toHaveBeenCalledWith("integration.list", {
+      filter: {
+        provider: "github",
+        projectId: undefined,
+        enabled: undefined,
+      },
+    });
+  });
+
+  it("creates integration bindings through integration.create", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "ibind-1",
+        provider: "github",
+        projectId: "proj-1",
+        targetKind: "repository",
+        targetRef: "evcraddock/todu-pi-extensions",
+        strategy: "bidirectional",
+        enabled: true,
+        createdAt: "2026-03-19T00:00:00.000Z",
+        updatedAt: "2026-03-19T00:00:00.000Z",
+      },
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(
+      client.createIntegrationBinding({
+        provider: "github",
+        projectId: "proj-1",
+        targetKind: "repository",
+        targetRef: "evcraddock/todu-pi-extensions",
+      })
+    ).resolves.toEqual({
+      id: "ibind-1",
+      provider: "github",
+      projectId: "proj-1",
+      targetKind: "repository",
+      targetRef: "evcraddock/todu-pi-extensions",
+      strategy: "bidirectional",
+      enabled: true,
+      options: undefined,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
+    });
+    expect(connection.request).toHaveBeenCalledWith("integration.create", {
+      input: {
+        provider: "github",
+        projectId: "proj-1",
+        targetKind: "repository",
+        targetRef: "evcraddock/todu-pi-extensions",
+        strategy: undefined,
+        enabled: undefined,
+        options: undefined,
+      },
+    });
+  });
+
+  it("maps integration failures into client errors", async () => {
+    const connection = createConnectionMock();
+    connection.request
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "invalid integration filter",
+          details: { field: "provider" },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: "CONFLICT",
+          message: "project already has an integration binding",
+          details: { projectId: "proj-1" },
+        },
+      });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.listIntegrationBindings()).rejects.toEqual(
+      expect.objectContaining({
+        name: "ToduDaemonClientError",
+        code: "validation",
+        method: "integration.list",
+        message: "integration.list failed (VALIDATION_ERROR): invalid integration filter",
+      })
+    );
+    await expect(
+      client.createIntegrationBinding({
+        provider: "github",
+        projectId: "proj-1",
+        targetKind: "repository",
+        targetRef: "evcraddock/todu-pi-extensions",
+      })
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: "ToduDaemonClientError",
+        code: "conflict",
+        method: "integration.create",
+        message: "integration.create failed (CONFLICT): project already has an integration binding",
+      })
+    );
+  });
+
   it("adapts event subscriptions through the connection manager", async () => {
     const connection = createConnectionMock();
     const subscription = { unsubscribe: vi.fn() };
