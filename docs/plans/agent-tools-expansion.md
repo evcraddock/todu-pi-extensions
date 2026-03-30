@@ -99,14 +99,35 @@ Remaining candidates:
 - `project-check`
 - `project-register`
 
+Recommended boundary:
+
+- keep these tools inside `todu-pi-extensions` as native tools rather than leaving them permanently in external skills
+- do not fold them into plain task or project CRUD modules
+- implement them through a dedicated integration-focused service boundary, such as `ProjectIntegrationService`, that sits alongside `TaskService` and the future `ProjectService`
+- keep repo-derived context in a narrow helper layer rather than in the tool handlers or CRUD services directly
+
+Why this is the right boundary:
+
+- the historical skills are still operation-oriented and map well to native tools once the missing runtime pieces exist
+- they need daemon-backed integration data plus local repository inspection, which is a different responsibility than plain project record reads or writes
+- keeping them in a separate service family prevents `TaskService` or `ProjectService` from turning into a catch-all workspace API
+- the extra complexity is narrow and explicit instead of leaking into every project tool
+
 Needed work:
 
-- model integration bindings in the extension runtime
-- read git remote information safely from the local repository when needed
+- add a small repo-context helper that can resolve a repository path, inspect git remotes deterministically, and normalize provider plus target reference data
+- model integration bindings in the extension runtime through a dedicated integration service boundary rather than a broad workspace service
 - add daemon-backed integration listing and mutation support
-- decide whether repository-derived context belongs in the tool parameters, ambient context, or a small helper service
+- define clear precedence between explicit tool parameters and ambient current-repo detection
+- define explicit ambiguity handling for multiple remotes, unsupported remote formats, duplicate bindings, and multiple matching bindings
 
-These tools are still plausible, but they are less pure than task CRUD because they mix backend state with local repo inspection.
+Recommended parameter and context policy:
+
+- repo-aware tools may default to the current working directory only when repository context is unambiguous
+- explicit tool parameters such as `repositoryPath`, `provider`, or `targetRef` must override ambient repo detection
+- tool handlers should delegate repo inspection and normalization to the repo-context helper rather than parsing git output inline
+
+These tools are still plausible, but they should be treated as a separate integration family rather than as an extension of task/project parity work.
 
 #### 3. Habit tools
 
@@ -180,10 +201,22 @@ Resolved carry-forward decisions:
 
 Still open:
 
-- [ ] Should project integration operations live in the same extension package as task tools, or should they wait until task tools prove out in practice?
 - [ ] Should habit and recurring support be added through one broader workspace service or through separate domain-specific services?
 - [ ] Should RRULE parsing be implemented as repository utilities, or should the model provide normalized schedule strings directly to tools?
 - [ ] Should destructive tools such as delete require a confirmation pattern, or is direct tool execution acceptable because the model already received the user's request?
+
+Resolved in this plan:
+
+- [x] Project integration operations should live in the same `todu-pi-extensions` package as other native tools, but behind a dedicated integration-focused service boundary instead of inside `TaskService` or plain project CRUD services.
+- [x] Repository-derived context should be handled by a narrow repo-context helper plus explicit tool parameters, with explicit parameters taking precedence over ambient current-repo detection.
+- [x] Integration-binding lookup and mutation requirements should be treated as explicit daemon-client expansion work, not inferred behavior in the tool layer.
+- [x] Multiple remotes, unsupported remote formats, duplicate bindings, and multiple matching bindings should remain explicit ambiguity states rather than guessed-through cases.
+
+Intentional deferrals for this area:
+
+- exact daemon RPC method names and payload shapes for integration operations until the service-foundation implementation task
+- any automatic project-name suggestion or conflict-resolution UX beyond what the dedicated `project_register` task defines
+- any reuse of integration bindings to enrich plain project CRUD results
 
 Intentional deferrals:
 
@@ -196,8 +229,8 @@ Intentional deferrals:
    - add move, delete, and project mutation operations
    - success criteria: remaining task/project CRUD-style skills become tool candidates
 2. **Add repository integration service support**
-   - model integration bindings and repo-derived project checks
-   - success criteria: `project-check` and `project-register` can be implemented natively
+   - add a dedicated `ProjectIntegrationService`, repo-context helper, and daemon-backed integration bindings support
+   - success criteria: `project-check` and `project-register` can be implemented natively without leaking repo logic into plain project CRUD services
 3. **Add habit domain and tools**
    - add types, service layer, and native habit tools
    - success criteria: core habit skills are covered by native tools
@@ -214,7 +247,7 @@ Intentional deferrals:
 - [x] Error and cancellation behavior is defined.
 - [x] Affected code areas are identified.
 - [x] Test strategy is clear.
-- [ ] Open questions are resolved or explicitly deferred.
+- [x] Open questions are resolved or explicitly deferred.
 - [x] Work can be split into concrete tasks with clear success criteria.
 
 ## References
