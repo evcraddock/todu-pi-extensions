@@ -1,4 +1,6 @@
+import type { ProjectIntegrationService } from "../project-integration-service";
 import type { ProjectService } from "../project-service";
+import { createRepoContextService } from "../repo-context";
 import type { TaskService } from "../task-service";
 import { createToduDaemonClient, type ToduDaemonClient } from "./daemon-client";
 import {
@@ -6,6 +8,7 @@ import {
   type CreateToduDaemonConnectionOptions,
   type ToduDaemonConnection,
 } from "./daemon-connection";
+import { createToduProjectIntegrationService } from "./todu-project-integration-service";
 import { createToduProjectService } from "./todu-project-service";
 import { createToduTaskService } from "./todu-task-service";
 
@@ -16,8 +19,10 @@ export interface ToduTaskServiceRuntime {
   client: ToduDaemonClient;
   taskService: TaskService;
   projectService: ProjectService;
+  projectIntegrationService: ProjectIntegrationService;
   ensureConnected(): Promise<TaskService>;
   ensureProjectServiceConnected(): Promise<ProjectService>;
+  ensureProjectIntegrationServiceConnected(): Promise<ProjectIntegrationService>;
   disconnect(): Promise<void>;
 }
 
@@ -32,6 +37,11 @@ const createToduTaskServiceRuntime = (
   const client = createToduDaemonClient({ connection });
   const taskService = createToduTaskService({ client });
   const projectService = createToduProjectService({ client });
+  const projectIntegrationService = createToduProjectIntegrationService({
+    client,
+    projectService,
+    repoContextService: createRepoContextService(),
+  });
   const initialConnectTimeoutMs = normalizeTimeout(
     options.initialConnectTimeoutMs,
     DEFAULT_TODU_INITIAL_CONNECT_TIMEOUT_MS
@@ -42,6 +52,7 @@ const createToduTaskServiceRuntime = (
     client,
     taskService,
     projectService,
+    projectIntegrationService,
     ensureConnected: async () => {
       if (connection.getState().status !== "connected") {
         await connectWithinTimeout(connection, initialConnectTimeoutMs);
@@ -55,6 +66,13 @@ const createToduTaskServiceRuntime = (
       }
 
       return projectService;
+    },
+    ensureProjectIntegrationServiceConnected: async () => {
+      if (connection.getState().status !== "connected") {
+        await connectWithinTimeout(connection, initialConnectTimeoutMs);
+      }
+
+      return projectIntegrationService;
     },
     disconnect: () => connection.disconnect(),
   };

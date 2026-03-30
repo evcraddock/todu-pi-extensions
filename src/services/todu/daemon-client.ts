@@ -1,4 +1,6 @@
 import type {
+  IntegrationBinding as ToduIntegrationBinding,
+  IntegrationBindingFilter as ToduIntegrationBindingFilter,
   Note as ToduNote,
   Project as ToduProject,
   Task as ToduTask,
@@ -17,6 +19,11 @@ import type {
   TaskStatus,
   TaskSummary,
 } from "../../domain/task";
+import type {
+  CreateIntegrationBindingInput,
+  IntegrationBinding,
+  IntegrationBindingFilter,
+} from "../project-integration-service";
 import type {
   CreateProjectInput,
   DeleteProjectResult,
@@ -78,6 +85,8 @@ export interface ToduDaemonClient {
   createProject(input: CreateProjectInput): Promise<ToduProjectSummary>;
   updateProject(input: UpdateLocalProjectInput): Promise<ToduProjectSummary>;
   deleteProject(projectId: string): Promise<DeleteProjectResult>;
+  listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
+  createIntegrationBinding(input: CreateIntegrationBindingInput): Promise<IntegrationBinding>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
   on(
     eventName: ToduDaemonEventName,
@@ -207,6 +216,32 @@ const createToduDaemonClient = ({
     };
   },
 
+  async listIntegrationBindings(
+    filter: IntegrationBindingFilter = {}
+  ): Promise<IntegrationBinding[]> {
+    const result = await connection.request<ToduIntegrationBinding[]>("integration.list", {
+      filter: mapIntegrationBindingFilter(filter),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("integration.list", result.error);
+    }
+
+    return result.value.map(mapIntegrationBinding);
+  },
+
+  async createIntegrationBinding(
+    input: CreateIntegrationBindingInput
+  ): Promise<IntegrationBinding> {
+    const result = await connection.request<ToduIntegrationBinding>("integration.create", {
+      input: mapCreateIntegrationBindingInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("integration.create", result.error);
+    }
+
+    return mapIntegrationBinding(result.value);
+  },
+
   async listTaskComments(taskId: TaskId): Promise<TaskComment[]> {
     return fetchTaskComments(connection, taskId);
   },
@@ -297,6 +332,19 @@ const mapProjectSummary = (project: ToduProject): ToduProjectSummary => ({
   description: project.description ?? null,
 });
 
+const mapIntegrationBinding = (binding: ToduIntegrationBinding): IntegrationBinding => ({
+  id: binding.id,
+  provider: binding.provider,
+  projectId: binding.projectId,
+  targetKind: binding.targetKind,
+  targetRef: binding.targetRef,
+  strategy: binding.strategy,
+  enabled: binding.enabled,
+  options: binding.options,
+  createdAt: binding.createdAt,
+  updatedAt: binding.updatedAt,
+});
+
 const mapCreateProjectInput = (input: CreateProjectInput): Record<string, unknown> => ({
   name: input.name,
   description: input.description ?? undefined,
@@ -308,6 +356,26 @@ const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, u
   description: input.description ?? undefined,
   status: input.status ? toRemoteProjectStatus(input.status) : undefined,
   priority: input.priority ?? undefined,
+});
+
+const mapIntegrationBindingFilter = (
+  filter: IntegrationBindingFilter
+): ToduIntegrationBindingFilter => ({
+  provider: filter.provider,
+  projectId: filter.projectId as ToduIntegrationBindingFilter["projectId"],
+  enabled: filter.enabled,
+});
+
+const mapCreateIntegrationBindingInput = (
+  input: CreateIntegrationBindingInput
+): Record<string, unknown> => ({
+  provider: input.provider,
+  projectId: input.projectId,
+  targetKind: input.targetKind,
+  targetRef: input.targetRef,
+  strategy: input.strategy,
+  enabled: input.enabled,
+  options: input.options,
 });
 
 const mapTaskFilter = (filter: TaskFilter): Record<string, unknown> => {
@@ -423,8 +491,10 @@ const toRemoteProjectStatus = (status: ProjectSummary["status"]): string =>
 
 export {
   createToduDaemonClient,
+  mapCreateIntegrationBindingInput,
   mapCreateProjectInput,
   mapDaemonErrorToClientError,
+  mapIntegrationBindingFilter,
   mapUpdateProjectInput,
   toLocalTaskStatus,
   toRemoteProjectStatus,

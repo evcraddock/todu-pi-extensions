@@ -36,6 +36,8 @@ describe("createToduTaskService", () => {
       createProject: vi.fn(),
       updateProject: vi.fn(),
       deleteProject: vi.fn(),
+      listIntegrationBindings: vi.fn(),
+      createIntegrationBinding: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -81,6 +83,8 @@ describe("createToduTaskService", () => {
       createProject: vi.fn(),
       updateProject: vi.fn(),
       deleteProject: vi.fn(),
+      listIntegrationBindings: vi.fn(),
+      createIntegrationBinding: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -129,6 +133,8 @@ describe("createToduTaskService", () => {
       createProject: vi.fn(),
       updateProject: vi.fn(),
       deleteProject: vi.fn(),
+      listIntegrationBindings: vi.fn(),
+      createIntegrationBinding: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -182,6 +188,8 @@ describe("createToduTaskService", () => {
       createProject: vi.fn(),
       updateProject: vi.fn(),
       deleteProject: vi.fn(),
+      listIntegrationBindings: vi.fn(),
+      createIntegrationBinding: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -246,6 +254,8 @@ describe("createToduTaskService", () => {
       createProject: vi.fn(),
       updateProject: vi.fn(),
       deleteProject: vi.fn(),
+      listIntegrationBindings: vi.fn(),
+      createIntegrationBinding: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
