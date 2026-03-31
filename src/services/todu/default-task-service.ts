@@ -1,3 +1,4 @@
+import type { HabitService } from "../habit-service";
 import type { ProjectIntegrationService } from "../project-integration-service";
 import type { ProjectService } from "../project-service";
 import type { RecurringService } from "../recurring-service";
@@ -11,6 +12,7 @@ import {
 } from "./daemon-connection";
 import { createToduProjectIntegrationService } from "./todu-project-integration-service";
 import { createToduProjectService } from "./todu-project-service";
+import { createToduHabitService } from "./todu-habit-service";
 import { createToduRecurringService } from "./todu-recurring-service";
 import { createToduTaskService } from "./todu-task-service";
 
@@ -22,10 +24,12 @@ export interface ToduTaskServiceRuntime {
   taskService: TaskService;
   projectService: ProjectService;
   recurringService: RecurringService;
+  habitService: HabitService;
   projectIntegrationService: ProjectIntegrationService;
   ensureConnected(): Promise<TaskService>;
   ensureProjectServiceConnected(): Promise<ProjectService>;
   ensureRecurringServiceConnected(): Promise<RecurringService>;
+  ensureHabitServiceConnected(): Promise<HabitService>;
   ensureProjectIntegrationServiceConnected(): Promise<ProjectIntegrationService>;
   disconnect(): Promise<void>;
 }
@@ -42,6 +46,7 @@ const createToduTaskServiceRuntime = (
   const taskService = createToduTaskService({ client });
   const projectService = createToduProjectService({ client });
   const recurringService = createToduRecurringService({ client });
+  const habitService = createToduHabitService({ client });
   const projectIntegrationService = createToduProjectIntegrationService({
     client,
     projectService,
@@ -58,6 +63,7 @@ const createToduTaskServiceRuntime = (
     taskService,
     projectService,
     recurringService,
+    habitService,
     projectIntegrationService,
     ensureConnected: async () => {
       if (connection.getState().status !== "connected") {
@@ -79,6 +85,13 @@ const createToduTaskServiceRuntime = (
       }
 
       return recurringService;
+    },
+    ensureHabitServiceConnected: async () => {
+      if (connection.getState().status !== "connected") {
+        await connectWithinTimeout(connection, initialConnectTimeoutMs);
+      }
+
+      return habitService;
     },
     ensureProjectIntegrationServiceConnected: async () => {
       if (connection.getState().status !== "connected") {
