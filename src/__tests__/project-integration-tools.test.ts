@@ -454,11 +454,9 @@ describe("createProjectRegisterToolDefinition", () => {
     } as unknown as ProjectIntegrationService;
     const tool = createProjectRegisterToolDefinition({
       getProjectIntegrationService: vi.fn().mockResolvedValue(projectIntegrationService),
-      getProjectService: vi
-        .fn()
-        .mockResolvedValue({
-          listProjects: vi.fn().mockResolvedValue([]),
-        } as unknown as ProjectService),
+      getProjectService: vi.fn().mockResolvedValue({
+        listProjects: vi.fn().mockResolvedValue([]),
+      } as unknown as ProjectService),
     });
 
     await tool.execute("tool-call-1", {
