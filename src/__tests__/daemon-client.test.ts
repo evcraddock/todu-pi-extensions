@@ -650,4 +650,60 @@ describe("createToduDaemonClient", () => {
 
     await expect(client.deleteTask("task-missing")).rejects.toThrow("task.delete failed");
   });
+
+  it("moves a task through task.move", async () => {
+    const connection = createConnectionMock();
+    connection.request
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          id: "task-new",
+          title: "Moved task",
+          status: "active",
+          priority: "medium",
+          projectId: "proj-2",
+          labels: [],
+          description: "desc",
+          assignees: [],
+          createdAt: "2026-03-31T00:00:00.000Z",
+          updatedAt: "2026-03-31T00:00:00.000Z",
+        },
+      })
+      .mockResolvedValueOnce({ ok: true, value: [] });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    const result = await client.moveTask({ taskId: "task-1", targetProjectId: "proj-2" });
+
+    expect(result.sourceTaskId).toBe("task-1");
+    expect(result.targetTask.id).toBe("task-new");
+    expect(connection.request).toHaveBeenCalledWith("task.move", {
+      id: "task-1",
+      targetProjectId: "proj-2",
+    });
+  });
+
+  it("throws a client error when task.move fails", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Task not found" },
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(
+      client.moveTask({ taskId: "task-missing", targetProjectId: "proj-2" })
+    ).rejects.toThrow("task.move failed");
+  });
 });

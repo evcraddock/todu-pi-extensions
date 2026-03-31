@@ -34,6 +34,16 @@ export interface DeleteTaskResult {
   deleted: true;
 }
 
+export interface MoveTaskInput {
+  taskId: TaskId;
+  targetProjectId: string;
+}
+
+export interface MoveTaskResult {
+  sourceTaskId: TaskId;
+  targetTask: TaskDetail;
+}
+
 export interface TaskService {
   listTasks(filter?: TaskFilter): Promise<TaskSummary[]>;
   getTask(taskId: TaskId): Promise<TaskDetail | null>;
@@ -45,5 +55,6 @@ export interface TaskService {
   listProjects(): Promise<ProjectSummary[]>;
   getProject(projectId: string): Promise<ProjectSummary | null>;
   deleteTask(taskId: TaskId): Promise<DeleteTaskResult>;
+  moveTask(input: MoveTaskInput): Promise<MoveTaskResult>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
 }

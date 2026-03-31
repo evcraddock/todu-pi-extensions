@@ -8,6 +8,7 @@ import {
   createTaskCommentCreateToolDefinition,
   createTaskCreateToolDefinition,
   createTaskDeleteToolDefinition,
+  createTaskMoveToolDefinition,
   createTaskUpdateToolDefinition,
   normalizeCreateTaskInput,
   normalizeTaskCommentInput,
@@ -561,5 +562,133 @@ describe("createTaskDeleteToolDefinition", () => {
     });
 
     await expect(tool.execute("tc-1", { taskId: "task-1" })).rejects.toThrow("task_delete failed");
+  });
+});
+
+describe("createTaskMoveToolDefinition", () => {
+  it("registers the task_move tool", () => {
+    const pi = { registerTool: vi.fn() };
+
+    registerTools(pi as never, {
+      getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+    });
+
+    const registeredToolNames = pi.registerTool.mock.calls.map(([tool]) => tool.name);
+    expect(registeredToolNames).toEqual(expect.arrayContaining(["task_move"]));
+  });
+
+  it("moves a task and returns structured details", async () => {
+    const targetTask = createTaskDetail({
+      id: "task-new",
+      projectId: "proj-2",
+      projectName: "Target",
+    });
+    const taskService = {
+      moveTask: vi.fn().mockResolvedValue({ sourceTaskId: "task-1", targetTask }),
+      getProject: vi.fn().mockResolvedValue({ id: "proj-2", name: "Target" }),
+      listProjects: vi.fn().mockResolvedValue([{ id: "proj-2", name: "Target" }]),
+    } as unknown as TaskService;
+
+    const tool = createTaskMoveToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tc-1", { taskId: "task-1", projectId: "proj-2" });
+
+    expect(result.content[0]?.text).toContain("Moved task task-1");
+    expect(result.content[0]?.text).toContain("task-new");
+    expect(result.details).toMatchObject({
+      kind: "task_move",
+      sourceTaskId: "task-1",
+      found: true,
+      moved: true,
+    });
+  });
+
+  it("resolves project by name", async () => {
+    const targetTask = createTaskDetail({
+      id: "task-new",
+      projectId: "proj-2",
+      projectName: "Target",
+    });
+    const taskService = {
+      moveTask: vi.fn().mockResolvedValue({ sourceTaskId: "task-1", targetTask }),
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "proj-2", name: "Target", status: "active", priority: "medium" },
+        ]),
+    } as unknown as TaskService;
+
+    const tool = createTaskMoveToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tc-1", { taskId: "task-1", projectId: "Target" });
+
+    expect(taskService.moveTask).toHaveBeenCalledWith({
+      taskId: "task-1",
+      targetProjectId: "proj-2",
+    });
+    expect(result.details).toMatchObject({ kind: "task_move", moved: true });
+  });
+
+  it("returns not-found when task does not exist", async () => {
+    const taskService = {
+      moveTask: vi.fn().mockRejectedValue(
+        new ToduTaskServiceError({
+          operation: "moveTask",
+          causeCode: "not-found",
+          message: "moveTask failed",
+        })
+      ),
+      getProject: vi.fn().mockResolvedValue({ id: "proj-2", name: "Target" }),
+      listProjects: vi.fn(),
+    } as unknown as TaskService;
+
+    const tool = createTaskMoveToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tc-1", { taskId: "task-missing", projectId: "proj-2" });
+
+    expect(result.content[0]?.text).toContain("Task not found: task-missing");
+    expect(result.details).toMatchObject({ kind: "task_move", found: false, moved: false });
+  });
+
+  it("throws when project is not found", async () => {
+    const taskService = {
+      getProject: vi.fn().mockResolvedValue(null),
+      listProjects: vi.fn().mockResolvedValue([]),
+    } as unknown as TaskService;
+
+    const tool = createTaskMoveToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    await expect(
+      tool.execute("tc-1", { taskId: "task-1", projectId: "NonExistent" })
+    ).rejects.toThrow("project not found");
+  });
+
+  it("rejects empty taskId", async () => {
+    const tool = createTaskMoveToolDefinition({
+      getTaskService: vi.fn(),
+    });
+
+    await expect(tool.execute("tc-1", { taskId: "  ", projectId: "proj-2" })).rejects.toThrow(
+      "taskId is required"
+    );
+  });
+
+  it("rejects empty projectId", async () => {
+    const tool = createTaskMoveToolDefinition({
+      getTaskService: vi.fn(),
+    });
+
+    await expect(tool.execute("tc-1", { taskId: "task-1", projectId: "  " })).rejects.toThrow(
+      "projectId is required"
+    );
   });
 });

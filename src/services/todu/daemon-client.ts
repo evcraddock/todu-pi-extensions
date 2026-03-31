@@ -51,6 +51,8 @@ import type {
   AddTaskCommentInput,
   CreateTaskInput,
   DeleteTaskResult,
+  MoveTaskInput,
+  MoveTaskResult,
   UpdateTaskInput,
 } from "../task-service";
 import type { ToduDaemonConnection, ToduDaemonConnectionError } from "./daemon-connection";
@@ -116,6 +118,7 @@ export interface ToduDaemonClient {
   listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
   createIntegrationBinding(input: CreateIntegrationBindingInput): Promise<IntegrationBinding>;
   deleteTask(taskId: TaskId): Promise<DeleteTaskResult>;
+  moveTask(input: MoveTaskInput): Promise<MoveTaskResult>;
   listHabits(filter?: HabitFilter): Promise<HabitSummary[]>;
   getHabit(habitId: string): Promise<HabitDetail | null>;
   createHabit(input: CreateHabitInput): Promise<HabitDetail>;
@@ -203,6 +206,22 @@ const createToduDaemonClient = ({
     return {
       taskId,
       deleted: true,
+    };
+  },
+
+  async moveTask(input: MoveTaskInput): Promise<MoveTaskResult> {
+    const result = await connection.request<ToduTaskWithDetail>("task.move", {
+      id: input.taskId,
+      targetProjectId: input.targetProjectId,
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("task.move", result.error);
+    }
+
+    const comments = await fetchTaskComments(connection, result.value.id);
+    return {
+      sourceTaskId: input.taskId,
+      targetTask: mapTaskDetail(result.value, comments),
     };
   },
 

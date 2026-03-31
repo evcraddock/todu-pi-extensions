@@ -50,6 +50,7 @@ describe("createToduTaskService", () => {
       checkHabit: vi.fn(),
       deleteHabit: vi.fn(),
       deleteTask: vi.fn(),
+      moveTask: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -109,6 +110,7 @@ describe("createToduTaskService", () => {
       checkHabit: vi.fn(),
       deleteHabit: vi.fn(),
       deleteTask: vi.fn(),
+      moveTask: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -171,6 +173,7 @@ describe("createToduTaskService", () => {
       checkHabit: vi.fn(),
       deleteHabit: vi.fn(),
       deleteTask: vi.fn(),
+      moveTask: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -238,6 +241,7 @@ describe("createToduTaskService", () => {
       checkHabit: vi.fn(),
       deleteHabit: vi.fn(),
       deleteTask: vi.fn(),
+      moveTask: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -316,6 +320,7 @@ describe("createToduTaskService", () => {
       checkHabit: vi.fn(),
       deleteHabit: vi.fn(),
       deleteTask: vi.fn(),
+      moveTask: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -365,6 +370,53 @@ describe("createToduTaskService", () => {
     await expect(taskService.deleteTask("task-missing")).rejects.toThrow(ToduTaskServiceError);
     await expect(taskService.deleteTask("task-missing")).rejects.toMatchObject({
       operation: "deleteTask",
+      causeCode: "not-found",
+    });
+  });
+
+  it("delegates moveTask to the daemon client and hydrates project name", async () => {
+    const targetTask = {
+      id: "task-new",
+      title: "Moved task",
+      status: "active" as const,
+      priority: "medium" as const,
+      projectId: "proj-2",
+      projectName: null,
+      labels: [],
+      description: null,
+      comments: [],
+    };
+    const client = {
+      moveTask: vi.fn().mockResolvedValue({ sourceTaskId: "task-1", targetTask }),
+      getProject: vi.fn().mockResolvedValue({ id: "proj-2", name: "Target Project" }),
+    };
+    const taskService = createToduTaskService({ client: client as never });
+
+    const result = await taskService.moveTask({ taskId: "task-1", targetProjectId: "proj-2" });
+
+    expect(result.sourceTaskId).toBe("task-1");
+    expect(result.targetTask.projectName).toBe("Target Project");
+  });
+
+  it("wraps daemon client errors for moveTask", async () => {
+    const client = {
+      moveTask: vi.fn().mockRejectedValue(
+        new ToduDaemonClientError({
+          code: "not-found",
+          method: "task.move",
+          message: "Task not found",
+        })
+      ),
+    };
+    const taskService = createToduTaskService({ client: client as never });
+
+    await expect(
+      taskService.moveTask({ taskId: "task-missing", targetProjectId: "proj-2" })
+    ).rejects.toThrow(ToduTaskServiceError);
+    await expect(
+      taskService.moveTask({ taskId: "task-missing", targetProjectId: "proj-2" })
+    ).rejects.toMatchObject({
+      operation: "moveTask",
       causeCode: "not-found",
     });
   });
