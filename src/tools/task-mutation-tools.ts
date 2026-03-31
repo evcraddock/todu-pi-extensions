@@ -17,6 +17,7 @@ import type {
   AddTaskCommentInput,
   CreateTaskInput,
   DeleteTaskResult,
+  MoveTaskResult,
   TaskService,
   UpdateTaskInput,
 } from "../services/task-service";
@@ -54,6 +55,11 @@ const TaskCommentCreateParams = Type.Object({
 
 const TaskDeleteParams = Type.Object({
   taskId: Type.String({ description: "Task ID" }),
+});
+
+const TaskMoveParams = Type.Object({
+  taskId: Type.String({ description: "Task ID" }),
+  projectId: Type.String({ description: "Target project ID or unique project name" }),
 });
 
 interface TaskCreateToolParams {
@@ -103,6 +109,19 @@ interface TaskDeleteToolDetails {
   found: boolean;
   deleted: boolean;
   result?: DeleteTaskResult;
+}
+
+interface TaskMoveToolParams {
+  taskId: string;
+  projectId: string;
+}
+
+interface TaskMoveToolDetails {
+  kind: "task_move";
+  sourceTaskId: TaskId;
+  found: boolean;
+  moved: boolean;
+  result?: MoveTaskResult;
 }
 
 interface TaskMutationToolDependencies {
@@ -255,6 +274,60 @@ const createTaskDeleteToolDefinition = ({ getTaskService }: TaskMutationToolDepe
   },
 });
 
+const createTaskMoveToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
+  name: "task_move",
+  label: "Task Move",
+  description: "Move a task to a different project.",
+  promptSnippet: "Move a task to a different project by task ID and target project reference.",
+  promptGuidelines: [
+    "Use this tool to move a task between projects in normal chat.",
+    "Provide the task ID and target project ID or unique project name explicitly.",
+    "The original task is cancelled and a new task is created in the target project.",
+  ],
+  parameters: TaskMoveParams,
+  async execute(_toolCallId: string, params: TaskMoveToolParams) {
+    const taskId = normalizeRequiredText(params.taskId, "taskId") as TaskId;
+    const projectRef = normalizeRequiredText(params.projectId, "projectId");
+
+    try {
+      const taskService = await getTaskService();
+      const project = await resolveProjectForTaskCreate(taskService, projectRef);
+      const result = await taskService.moveTask({
+        taskId,
+        targetProjectId: project.id,
+      });
+      const details: TaskMoveToolDetails = {
+        kind: "task_move",
+        sourceTaskId: taskId,
+        found: true,
+        moved: true,
+        result,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: formatTaskMoveContent(details) }],
+        details,
+      };
+    } catch (error) {
+      if (isTaskNotFoundError(error)) {
+        const details: TaskMoveToolDetails = {
+          kind: "task_move",
+          sourceTaskId: taskId,
+          found: false,
+          moved: false,
+        };
+
+        return {
+          content: [{ type: "text" as const, text: formatTaskMoveContent(details) }],
+          details,
+        };
+      }
+
+      throw new Error(formatToolError(error, "task_move failed"), { cause: error });
+    }
+  },
+});
+
 const registerTaskMutationTools = (
   pi: Pick<ExtensionAPI, "registerTool">,
   dependencies: TaskMutationToolDependencies
@@ -263,6 +336,7 @@ const registerTaskMutationTools = (
   pi.registerTool(createTaskUpdateToolDefinition(dependencies));
   pi.registerTool(createTaskCommentCreateToolDefinition(dependencies));
   pi.registerTool(createTaskDeleteToolDefinition(dependencies));
+  pi.registerTool(createTaskMoveToolDefinition(dependencies));
 };
 
 const normalizeCreateTaskInput = (params: TaskCreateToolParams): CreateTaskInput => ({
@@ -408,6 +482,20 @@ const formatTaskDeleteContent = (details: TaskDeleteToolDetails): string =>
 const isTaskNotFoundError = (error: unknown): error is ToduTaskServiceError =>
   error instanceof ToduTaskServiceError && error.causeCode === "not-found";
 
+const formatTaskMoveContent = (details: TaskMoveToolDetails): string => {
+  if (!details.found) {
+    return `Task not found: ${details.sourceTaskId}`;
+  }
+
+  const target = details.result?.targetTask;
+  const projectLabel = target?.projectName ?? target?.projectId ?? "unknown";
+  return [
+    `Moved task ${details.sourceTaskId} → ${target?.id ?? "unknown"}`,
+    `Target project: ${projectLabel}`,
+    `New task: ${target?.id}: ${target?.title}`,
+  ].join("\n");
+};
+
 const formatToolError = (error: unknown, prefix: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
     return `${prefix}: ${error.message}`;
@@ -420,6 +508,7 @@ export type {
   TaskCommentCreateToolDetails,
   TaskCreateToolDetails,
   TaskDeleteToolDetails,
+  TaskMoveToolDetails,
   TaskMutationToolDependencies,
   TaskUpdateToolDetails,
 };
@@ -427,6 +516,7 @@ export {
   createTaskCommentCreateToolDefinition,
   createTaskCreateToolDefinition,
   createTaskDeleteToolDefinition,
+  createTaskMoveToolDefinition,
   createTaskUpdateToolDefinition,
   normalizeCreateTaskInput,
   normalizeTaskCommentInput,
