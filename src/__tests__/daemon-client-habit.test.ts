@@ -248,6 +248,30 @@ describe("createToduDaemonClient habit support", () => {
     expect(connection.request).toHaveBeenCalledWith("habit.delete", { id: "habit-1" });
   });
 
+  it("gets habit streak through habit.streak", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: {
+        current: 10,
+        longest: 10,
+        completedToday: true,
+        totalCheckins: 17,
+      },
+    });
+
+    const client = createClient(connection);
+    const streak = await client.getHabitStreak("habit-1");
+
+    expect(streak).toEqual({
+      current: 10,
+      longest: 10,
+      completedToday: true,
+      totalCheckins: 17,
+    });
+    expect(connection.request).toHaveBeenCalledWith("habit.streak", { id: "habit-1" });
+  });
+
   it("throws a client error for daemon failures", async () => {
     const connection = createConnectionMock();
     connection.request.mockResolvedValue({

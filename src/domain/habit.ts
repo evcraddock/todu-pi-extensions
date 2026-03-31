@@ -33,6 +33,10 @@ export interface HabitCheckResult {
   streak: HabitStreak;
 }
 
+export interface HabitSummaryWithStreak extends HabitSummary {
+  streak: HabitStreak | null;
+}
+
 export interface HabitFilter {
   paused?: boolean;
   projectId?: string;

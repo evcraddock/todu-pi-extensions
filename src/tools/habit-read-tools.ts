@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
-import type { HabitSummary } from "../domain/habit";
+import type { HabitStreak, HabitSummaryWithStreak } from "../domain/habit";
 import type { HabitService } from "../services/habit-service";
 
 const HabitListParams = Type.Object({});
@@ -9,7 +9,7 @@ const MAX_HABIT_LIST_PREVIEW_COUNT = 25;
 
 interface HabitListToolDetails {
   kind: "habit_list";
-  habits: HabitSummary[];
+  habits: HabitSummaryWithStreak[];
   total: number;
   empty: boolean;
 }
@@ -31,7 +31,7 @@ const createHabitListToolDefinition = ({ getHabitService }: HabitReadToolDepende
   async execute(_toolCallId: string, _params: Record<string, never>) {
     try {
       const habitService = await getHabitService();
-      const habits = await habitService.listHabits();
+      const habits = await habitService.listHabitsWithStreaks();
       const details: HabitListToolDetails = {
         kind: "habit_list",
         habits,
@@ -76,10 +76,28 @@ const formatHabitListContent = (details: HabitListToolDetails): string => {
   return lines.join("\n");
 };
 
-const formatHabitSummaryLine = (habit: HabitSummary): string => {
+const formatHabitSummaryLine = (habit: HabitSummaryWithStreak): string => {
   const projectLabel = habit.projectName ?? habit.projectId;
   const status = habit.paused ? "paused" : "active";
-  return `${habit.id} • ${habit.title} • ${status} • ${projectLabel}`;
+  const streakLabel = formatStreakLabel(habit.streak);
+  const todayLabel = formatTodayLabel(habit.streak);
+  return `${habit.id} • ${habit.title} • ${status} • ${projectLabel} • streak: ${streakLabel} • today: ${todayLabel}`;
+};
+
+const formatStreakLabel = (streak: HabitStreak | null): string => {
+  if (!streak) {
+    return "?";
+  }
+
+  return streak.current > 0 ? `🔥 ${streak.current}` : "0";
+};
+
+const formatTodayLabel = (streak: HabitStreak | null): string => {
+  if (!streak) {
+    return "?";
+  }
+
+  return streak.completedToday ? "✅" : "—";
 };
 
 const formatToolError = (error: unknown, prefix: string): string => {
@@ -91,4 +109,10 @@ const formatToolError = (error: unknown, prefix: string): string => {
 };
 
 export type { HabitListToolDetails, HabitReadToolDependencies };
-export { createHabitListToolDefinition, formatHabitListContent, registerHabitReadTools };
+export {
+  createHabitListToolDefinition,
+  formatHabitListContent,
+  formatStreakLabel,
+  formatTodayLabel,
+  registerHabitReadTools,
+};

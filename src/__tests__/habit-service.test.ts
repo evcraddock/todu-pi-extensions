@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { HabitDetail, HabitSummary } from "@/domain/habit";
+import type { HabitDetail, HabitSummary, HabitSummaryWithStreak } from "@/domain/habit";
 import { ToduDaemonClientError } from "@/services/todu/daemon-client";
 import { createToduHabitService, ToduHabitServiceError } from "@/services/todu/todu-habit-service";
 
@@ -104,5 +104,36 @@ describe("createToduHabitService", () => {
       operation: "listHabits",
       causeCode: "unavailable",
     });
+  });
+
+  it("returns habits with streaks from listHabitsWithStreaks", async () => {
+    const habits = [createHabitSummary()];
+    const streak = { current: 5, longest: 10, completedToday: true, totalCheckins: 25 };
+    const client = {
+      listHabits: vi.fn().mockResolvedValue(habits),
+      listProjects: vi.fn().mockResolvedValue([{ id: "proj-1", name: "Personal" }]),
+      getHabitStreak: vi.fn().mockResolvedValue(streak),
+    };
+
+    const service = createToduHabitService({ client: client as never });
+    const result: HabitSummaryWithStreak[] = await service.listHabitsWithStreaks();
+
+    expect(result[0]?.streak).toEqual(streak);
+    expect(result[0]?.projectName).toBe("Personal");
+  });
+
+  it("sets streak to null when streak fetch fails", async () => {
+    const habits = [createHabitSummary()];
+    const client = {
+      listHabits: vi.fn().mockResolvedValue(habits),
+      listProjects: vi.fn().mockResolvedValue([{ id: "proj-1", name: "Personal" }]),
+      getHabitStreak: vi.fn().mockRejectedValue(new Error("streak unavailable")),
+    };
+
+    const service = createToduHabitService({ client: client as never });
+    const result: HabitSummaryWithStreak[] = await service.listHabitsWithStreaks();
+
+    expect(result[0]?.streak).toBeNull();
+    expect(result[0]?.title).toBe("Morning meditation");
   });
 });

@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Container, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
 
+import type { HabitSummaryWithStreak } from "../domain/habit";
 import type {
   ProjectSummary,
   TaskDetail,
@@ -16,6 +17,7 @@ import { commentOnTask } from "../flows/comment-on-task";
 import { createTask } from "../flows/create-task";
 import { showTaskDetail } from "../flows/show-task-detail";
 import { updateTask } from "../flows/update-task";
+import type { HabitService } from "../services/habit-service";
 import type { TaskService } from "../services/task-service";
 import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-service";
 import type { TaskBrowseFilterState } from "../services/task-browse-filter-store";
@@ -28,6 +30,7 @@ import {
   type TaskDetailActionKind,
 } from "../ui/components/task-detail";
 import { createTaskListItem } from "../ui/components/task-list";
+import { formatHabitTable } from "../ui/components/habit-table";
 import { createTaskLoaderViewModel } from "../ui/components/loaders";
 import {
   taskPriorityOptions,
@@ -88,6 +91,7 @@ type EmptyTaskBrowseAction = "change-filters" | "clear-filters" | "close";
 
 export interface RegisterCommandDependencies {
   getTaskService?: () => Promise<TaskService>;
+  getHabitService?: () => Promise<HabitService>;
   getCurrentTaskId?: () => TaskId | null;
   clearCurrentTask?: (ctx: ExtensionCommandContext) => Promise<void>;
   promptTaskTitle?: (ctx: ExtensionCommandContext) => Promise<string | null>;
@@ -502,6 +506,77 @@ const createTaskNewCommandHandler = (
   };
 };
 
+const createHabitsCommandHandler = (
+  dependencies: RegisterCommandDependencies = {}
+): ((args: string, ctx: ExtensionCommandContext) => Promise<void>) => {
+  const getHabitService =
+    dependencies.getHabitService ??
+    (() => getDefaultToduTaskServiceRuntime().ensureHabitServiceConnected());
+
+  return async (_args: string, ctx: ExtensionCommandContext): Promise<void> => {
+    if (!ctx.hasUI) {
+      process.stderr.write("/habits requires interactive mode\n");
+      return;
+    }
+
+    try {
+      let habits: HabitSummaryWithStreak[] = [];
+      let loadError: string | null = null;
+
+      await ctx.ui.custom<void>((tui, theme, _keybindings, done) => {
+        const loader = new BorderedLoader(tui, theme, "Loading habits...");
+        loader.onAbort = () => done();
+
+        void getHabitService()
+          .then((habitService) => habitService.listHabitsWithStreaks())
+          .then((result) => {
+            habits = result;
+            done();
+          })
+          .catch((error: unknown) => {
+            loadError = formatTasksCommandError(error, "Failed to load habits");
+            done();
+          });
+
+        return loader;
+      });
+
+      if (loadError) {
+        ctx.ui.notify(loadError, "error");
+        return;
+      }
+
+      if (habits.length === 0) {
+        ctx.ui.notify("No habits found", "info");
+        return;
+      }
+
+      const table = formatHabitTable(habits);
+
+      await ctx.ui.custom<void>((_tui, theme, _keybindings, done) => {
+        const container = new Container();
+        container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+        container.addChild(new Text(theme.fg("accent", theme.bold("Habits")), 1, 0));
+        container.addChild(new Text(table, 1, 1));
+        container.addChild(new Text(theme.fg("dim", "esc close"), 1, 0));
+        container.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+
+        return {
+          render: (width: number) => container.render(width),
+          invalidate: () => container.invalidate(),
+          handleInput: (data: string) => {
+            if (data === "\x1b" || data === "q") {
+              done();
+            }
+          },
+        };
+      });
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to show habits"), "error");
+    }
+  };
+};
+
 const registerCommands = (
   pi: ExtensionAPI,
   dependencies: RegisterCommandDependencies = {}
@@ -533,6 +608,11 @@ const registerCommands = (
         ((ctx: ExtensionCommandContext, draft: TaskAuthoringDraft) =>
           requestTaskAuthoringAssistance(pi, ctx, draft)),
     }),
+  });
+
+  pi.registerCommand("habits", {
+    description: "Show habits with streak and today status",
+    handler: createHabitsCommandHandler(dependencies),
   });
 };
 
@@ -1642,6 +1722,7 @@ const formatTasksCommandError = (error: unknown, prefix: string): string => {
 };
 
 export {
+  createHabitsCommandHandler,
   createTaskClearCommandHandler,
   createTaskCommandHandler,
   createTaskNewCommandHandler,

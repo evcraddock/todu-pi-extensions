@@ -15,7 +15,13 @@ import type {
   TaskWithDetail as ToduTaskWithDetail,
 } from "@todu/core";
 
-import type { HabitCheckResult, HabitDetail, HabitFilter, HabitSummary } from "../../domain/habit";
+import type {
+  HabitCheckResult,
+  HabitDetail,
+  HabitFilter,
+  HabitStreak,
+  HabitSummary,
+} from "../../domain/habit";
 import type {
   RecurringFilter,
   RecurringTemplateDetail,
@@ -124,6 +130,7 @@ export interface ToduDaemonClient {
   createHabit(input: CreateHabitInput): Promise<HabitDetail>;
   updateHabit(input: UpdateHabitInput): Promise<HabitDetail>;
   checkHabit(habitId: string): Promise<HabitCheckResult>;
+  getHabitStreak(habitId: string): Promise<HabitStreak>;
   deleteHabit(habitId: string): Promise<DeleteHabitResult>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
   on(
@@ -430,6 +437,22 @@ const createToduDaemonClient = ({
     }
 
     return mapHabitCheckResult(result.value, habitId);
+  },
+
+  async getHabitStreak(habitId: string): Promise<HabitStreak> {
+    const result = await connection.request<ToduHabitStreak>("habit.streak", {
+      id: habitId,
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("habit.streak", result.error);
+    }
+
+    return {
+      current: result.value.current,
+      longest: result.value.longest,
+      completedToday: result.value.completedToday,
+      totalCheckins: result.value.totalCheckins,
+    };
   },
 
   async deleteHabit(habitId: string): Promise<DeleteHabitResult> {
