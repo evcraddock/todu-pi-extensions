@@ -19,20 +19,26 @@ const createHabit = (overrides: Partial<HabitSummaryWithStreak> = {}): HabitSumm
 });
 
 describe("formatStreakCell", () => {
-  it("shows fire emoji for streaks > 0", () => {
+  it("shows fire emoji with right-aligned number for streaks > 0", () => {
     expect(
-      formatStreakCell({ current: 10, longest: 10, completedToday: true, totalCheckins: 17 })
+      formatStreakCell({ current: 10, longest: 10, completedToday: true, totalCheckins: 17 }, 2)
     ).toBe("🔥 10");
   });
 
-  it("shows plain 0 for zero streaks", () => {
+  it("pads number to width", () => {
     expect(
-      formatStreakCell({ current: 0, longest: 5, completedToday: false, totalCheckins: 3 })
-    ).toBe("0");
+      formatStreakCell({ current: 2, longest: 10, completedToday: true, totalCheckins: 5 }, 2)
+    ).toBe("🔥  2");
   });
 
-  it("shows ? when streak is null", () => {
-    expect(formatStreakCell(null)).toBe("?");
+  it("shows spaces instead of fire for zero streaks", () => {
+    expect(
+      formatStreakCell({ current: 0, longest: 5, completedToday: false, totalCheckins: 3 }, 2)
+    ).toBe("    0");
+  });
+
+  it("returns spaces when streak is null", () => {
+    expect(formatStreakCell(null, 2)).toBe("     ");
   });
 });
 
@@ -45,7 +51,7 @@ describe("formatTodayCell", () => {
 
   it("shows dash for not completed", () => {
     expect(
-      formatTodayCell({ current: 0, longest: 5, completedToday: false, totalCheckins: 3 })
+      formatTodayCell({ current: 3, longest: 5, completedToday: false, totalCheckins: 10 })
     ).toBe("—");
   });
 
@@ -59,45 +65,50 @@ describe("formatHabitTable", () => {
     expect(formatHabitTable([])).toBe("No habits found.");
   });
 
-  it("renders a table with headers and data rows", () => {
-    const table = formatHabitTable([createHabit()]);
-
-    expect(table).toContain("Habit");
-    expect(table).toContain("Project");
-    expect(table).toContain("Streak");
-    expect(table).toContain("Today");
-    expect(table).toContain("floss");
-    expect(table).toContain("wellness");
-    expect(table).toContain("🔥 10");
-    expect(table).toContain("✅");
-    expect(table).toContain("┌");
-    expect(table).toContain("└");
-  });
-
-  it("renders multiple habits with separators", () => {
+  it("renders aligned rows", () => {
     const table = formatHabitTable([
       createHabit({
-        id: "h-1",
         title: "floss",
         streak: { current: 10, longest: 10, completedToday: true, totalCheckins: 17 },
       }),
       createHabit({
-        id: "h-2",
         title: "exercise",
-        streak: { current: 0, longest: 5, completedToday: false, totalCheckins: 3 },
+        streak: { current: 3, longest: 5, completedToday: false, totalCheckins: 10 },
       }),
     ]);
 
-    expect(table).toContain("floss");
-    expect(table).toContain("exercise");
-    expect(table).toContain("🔥 10");
-    expect(table).toContain("0");
-    expect(table).toContain("—");
+    const lines = table.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("floss");
+    expect(lines[0]).toContain("🔥 10");
+    expect(lines[0]).toContain("✅");
+    expect(lines[1]).toContain("exercise");
+    expect(lines[1]).toContain("🔥  3");
+    expect(lines[1]).toContain("—");
+  });
+
+  it("aligns fire icons in the same column", () => {
+    const table = formatHabitTable([
+      createHabit({
+        title: "floss",
+        streak: { current: 10, longest: 10, completedToday: true, totalCheckins: 17 },
+      }),
+      createHabit({
+        title: "rest",
+        streak: { current: 0, longest: 0, completedToday: false, totalCheckins: 0 },
+      }),
+    ]);
+
+    const lines = table.split("\n");
+    // fire line has 🔥, zero line has spaces in same position
+    expect(lines[0]).toContain("🔥 10");
+    expect(lines[1]).toContain("    0");
   });
 
   it("handles null streak gracefully", () => {
     const table = formatHabitTable([createHabit({ streak: null })]);
 
+    expect(table).toContain("floss");
     expect(table).toContain("?");
   });
 });
