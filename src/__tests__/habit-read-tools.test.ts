@@ -1,12 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { HabitSummary } from "@/domain/habit";
+import type { HabitSummaryWithStreak } from "@/domain/habit";
 import { registerTools } from "@/extension/register-tools";
 import type { HabitService } from "@/services/habit-service";
 import type { TaskService } from "@/services/task-service";
-import { createHabitListToolDefinition, formatHabitListContent } from "@/tools/habit-read-tools";
+import {
+  createHabitListToolDefinition,
+  formatHabitListContent,
+  formatStreakLabel,
+  formatTodayLabel,
+} from "@/tools/habit-read-tools";
 
-const createHabitSummary = (overrides: Partial<HabitSummary> = {}): HabitSummary => ({
+const createHabitWithStreak = (
+  overrides: Partial<HabitSummaryWithStreak> = {}
+): HabitSummaryWithStreak => ({
   id: "habit-1",
   title: "Morning meditation",
   projectId: "proj-1",
@@ -17,6 +24,7 @@ const createHabitSummary = (overrides: Partial<HabitSummary> = {}): HabitSummary
   endDate: null,
   nextDue: "2026-03-31",
   paused: false,
+  streak: { current: 5, longest: 10, completedToday: true, totalCheckins: 25 },
   ...overrides,
 });
 
@@ -34,16 +42,54 @@ describe("registerTools", () => {
   });
 });
 
-describe("formatHabitListContent", () => {
-  it("formats concise habit summary lines", () => {
+describe("formatStreakLabel", () => {
+  it("shows fire emoji for streaks > 0", () => {
     expect(
-      formatHabitListContent({
-        kind: "habit_list",
-        habits: [createHabitSummary()],
-        total: 1,
-        empty: false,
-      })
-    ).toContain("habit-1 • Morning meditation • active • Personal");
+      formatStreakLabel({ current: 5, longest: 10, completedToday: true, totalCheckins: 25 })
+    ).toBe("🔥 5");
+  });
+
+  it("shows plain 0 for zero streaks", () => {
+    expect(
+      formatStreakLabel({ current: 0, longest: 5, completedToday: false, totalCheckins: 10 })
+    ).toBe("0");
+  });
+
+  it("shows ? when streak is null", () => {
+    expect(formatStreakLabel(null)).toBe("?");
+  });
+});
+
+describe("formatTodayLabel", () => {
+  it("shows check for completed today", () => {
+    expect(
+      formatTodayLabel({ current: 5, longest: 10, completedToday: true, totalCheckins: 25 })
+    ).toBe("✅");
+  });
+
+  it("shows dash for not completed", () => {
+    expect(
+      formatTodayLabel({ current: 0, longest: 5, completedToday: false, totalCheckins: 10 })
+    ).toBe("—");
+  });
+
+  it("shows ? when streak is null", () => {
+    expect(formatTodayLabel(null)).toBe("?");
+  });
+});
+
+describe("formatHabitListContent", () => {
+  it("formats habit summary lines with streak info", () => {
+    const content = formatHabitListContent({
+      kind: "habit_list",
+      habits: [createHabitWithStreak()],
+      total: 1,
+      empty: false,
+    });
+
+    expect(content).toContain("Morning meditation");
+    expect(content).toContain("streak: 🔥 5");
+    expect(content).toContain("today: ✅");
   });
 
   it("returns empty message when no habits exist", () => {
@@ -59,10 +105,10 @@ describe("formatHabitListContent", () => {
 });
 
 describe("createHabitListToolDefinition", () => {
-  it("lists habits and returns structured details", async () => {
-    const habits = [createHabitSummary()];
+  it("lists habits with streaks and returns structured details", async () => {
+    const habits = [createHabitWithStreak()];
     const habitService = {
-      listHabits: vi.fn().mockResolvedValue(habits),
+      listHabitsWithStreaks: vi.fn().mockResolvedValue(habits),
     } as unknown as HabitService;
     const tool = createHabitListToolDefinition({
       getHabitService: vi.fn().mockResolvedValue(habitService),
@@ -70,19 +116,24 @@ describe("createHabitListToolDefinition", () => {
 
     const result = await tool.execute("tool-call-1", {});
 
-    expect(habitService.listHabits).toHaveBeenCalledWith();
+    expect(habitService.listHabitsWithStreaks).toHaveBeenCalledWith();
     expect(result.content[0]?.text).toContain("Habits (1):");
-    expect(result.details).toEqual({
+    expect(result.details).toMatchObject({
       kind: "habit_list",
-      habits,
       total: 1,
       empty: false,
+    });
+    expect(result.details.habits[0]?.streak).toEqual({
+      current: 5,
+      longest: 10,
+      completedToday: true,
+      totalCheckins: 25,
     });
   });
 
   it("returns empty details when no habits exist", async () => {
     const habitService = {
-      listHabits: vi.fn().mockResolvedValue([]),
+      listHabitsWithStreaks: vi.fn().mockResolvedValue([]),
     } as unknown as HabitService;
     const tool = createHabitListToolDefinition({
       getHabitService: vi.fn().mockResolvedValue(habitService),
@@ -96,7 +147,7 @@ describe("createHabitListToolDefinition", () => {
 
   it("throws on service failure", async () => {
     const habitService = {
-      listHabits: vi.fn().mockRejectedValue(new Error("connection lost")),
+      listHabitsWithStreaks: vi.fn().mockRejectedValue(new Error("connection lost")),
     } as unknown as HabitService;
     const tool = createHabitListToolDefinition({
       getHabitService: vi.fn().mockResolvedValue(habitService),

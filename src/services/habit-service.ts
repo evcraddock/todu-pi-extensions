@@ -3,7 +3,9 @@ import type {
   HabitDetail,
   HabitFilter,
   HabitId,
+  HabitStreak,
   HabitSummary,
+  HabitSummaryWithStreak,
 } from "../domain/habit";
 
 export interface CreateHabitInput {
@@ -32,6 +34,8 @@ export interface DeleteHabitResult {
 
 export interface HabitService {
   listHabits(filter?: HabitFilter): Promise<HabitSummary[]>;
+  listHabitsWithStreaks(filter?: HabitFilter): Promise<HabitSummaryWithStreak[]>;
+  getHabitStreak(habitId: HabitId): Promise<HabitStreak>;
   getHabit(habitId: HabitId): Promise<HabitDetail | null>;
   createHabit(input: CreateHabitInput): Promise<HabitDetail>;
   updateHabit(input: UpdateHabitInput): Promise<HabitDetail>;

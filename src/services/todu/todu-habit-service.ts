@@ -1,4 +1,9 @@
-import type { HabitDetail, HabitFilter, HabitSummary } from "../../domain/habit";
+import type {
+  HabitDetail,
+  HabitFilter,
+  HabitSummary,
+  HabitSummaryWithStreak,
+} from "../../domain/habit";
 import type { HabitService } from "../habit-service";
 import { ToduDaemonClientError, type ToduDaemonClient } from "./daemon-client";
 
@@ -48,6 +53,10 @@ const createToduHabitService = ({ client }: ToduHabitServiceDependencies): Habit
       const habit = await client.updateHabit(input);
       return hydrateHabitProjectName(client, habit);
     }),
+  listHabitsWithStreaks: (filter) =>
+    runHabitServiceOperation("listHabitsWithStreaks", () => listHabitsWithStreaks(client, filter)),
+  getHabitStreak: (habitId) =>
+    runHabitServiceOperation("getHabitStreak", () => client.getHabitStreak(habitId)),
   checkHabit: (habitId) => runHabitServiceOperation("checkHabit", () => client.checkHabit(habitId)),
   deleteHabit: (habitId) =>
     runHabitServiceOperation("deleteHabit", () => client.deleteHabit(habitId)),
@@ -98,9 +107,28 @@ const runHabitServiceOperation = async <TResult>(
   }
 };
 
+const listHabitsWithStreaks = async (
+  client: ToduDaemonClient,
+  filter?: HabitFilter
+): Promise<HabitSummaryWithStreak[]> => {
+  const habits = await listHabitsWithProjectNames(client, filter);
+  const streakResults = await Promise.allSettled(
+    habits.map((habit) => client.getHabitStreak(habit.id))
+  );
+
+  return habits.map((habit, index) => {
+    const streakResult = streakResults[index];
+    return {
+      ...habit,
+      streak: streakResult?.status === "fulfilled" ? streakResult.value : null,
+    };
+  });
+};
+
 export {
   createToduHabitService,
   hydrateHabitProjectName,
   listHabitsWithProjectNames,
+  listHabitsWithStreaks,
   runHabitServiceOperation,
 };
