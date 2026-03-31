@@ -16,9 +16,11 @@ import { updateTask } from "../flows/update-task";
 import type {
   AddTaskCommentInput,
   CreateTaskInput,
+  DeleteTaskResult,
   TaskService,
   UpdateTaskInput,
 } from "../services/task-service";
+import { ToduTaskServiceError } from "../services/todu/todu-task-service";
 
 const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelled"] as const;
 const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
@@ -48,6 +50,10 @@ const TaskUpdateParams = Type.Object({
 const TaskCommentCreateParams = Type.Object({
   taskId: Type.String({ description: "Task ID" }),
   content: Type.String({ description: "Comment content" }),
+});
+
+const TaskDeleteParams = Type.Object({
+  taskId: Type.String({ description: "Task ID" }),
 });
 
 interface TaskCreateToolParams {
@@ -85,6 +91,18 @@ interface TaskCommentCreateToolDetails {
   kind: "task_comment_create";
   taskId: TaskId;
   comment: TaskComment;
+}
+
+interface TaskDeleteToolParams {
+  taskId: string;
+}
+
+interface TaskDeleteToolDetails {
+  kind: "task_delete";
+  taskId: TaskId;
+  found: boolean;
+  deleted: boolean;
+  result?: DeleteTaskResult;
 }
 
 interface TaskMutationToolDependencies {
@@ -188,6 +206,55 @@ const createTaskCommentCreateToolDefinition = ({
   },
 });
 
+const createTaskDeleteToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
+  name: "task_delete",
+  label: "Task Delete",
+  description: "Delete a task by explicit ID.",
+  promptSnippet: "Delete a task by explicit task ID.",
+  promptGuidelines: [
+    "Use this tool for backend task deletion in normal chat.",
+    "Provide the task ID explicitly.",
+    "Do not guess which task to delete.",
+  ],
+  parameters: TaskDeleteParams,
+  async execute(_toolCallId: string, params: TaskDeleteToolParams) {
+    const taskId = normalizeRequiredText(params.taskId, "taskId") as TaskId;
+
+    try {
+      const taskService = await getTaskService();
+      const result = await taskService.deleteTask(taskId);
+      const details: TaskDeleteToolDetails = {
+        kind: "task_delete",
+        taskId,
+        found: true,
+        deleted: true,
+        result,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: formatTaskDeleteContent(details) }],
+        details,
+      };
+    } catch (error) {
+      if (isTaskNotFoundError(error)) {
+        const details: TaskDeleteToolDetails = {
+          kind: "task_delete",
+          taskId,
+          found: false,
+          deleted: false,
+        };
+
+        return {
+          content: [{ type: "text" as const, text: formatTaskDeleteContent(details) }],
+          details,
+        };
+      }
+
+      throw new Error(formatToolError(error, "task_delete failed"), { cause: error });
+    }
+  },
+});
+
 const registerTaskMutationTools = (
   pi: Pick<ExtensionAPI, "registerTool">,
   dependencies: TaskMutationToolDependencies
@@ -195,6 +262,7 @@ const registerTaskMutationTools = (
   pi.registerTool(createTaskCreateToolDefinition(dependencies));
   pi.registerTool(createTaskUpdateToolDefinition(dependencies));
   pi.registerTool(createTaskCommentCreateToolDefinition(dependencies));
+  pi.registerTool(createTaskDeleteToolDefinition(dependencies));
 };
 
 const normalizeCreateTaskInput = (params: TaskCreateToolParams): CreateTaskInput => ({
@@ -334,6 +402,12 @@ const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): stri
 const formatTaskCommentCreateContent = (comment: TaskComment): string =>
   `Added comment ${comment.id} to task ${comment.taskId}.`;
 
+const formatTaskDeleteContent = (details: TaskDeleteToolDetails): string =>
+  details.found ? `Deleted task ${details.taskId}.` : `Task not found: ${details.taskId}`;
+
+const isTaskNotFoundError = (error: unknown): error is ToduTaskServiceError =>
+  error instanceof ToduTaskServiceError && error.causeCode === "not-found";
+
 const formatToolError = (error: unknown, prefix: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
     return `${prefix}: ${error.message}`;
@@ -345,12 +419,14 @@ const formatToolError = (error: unknown, prefix: string): string => {
 export type {
   TaskCommentCreateToolDetails,
   TaskCreateToolDetails,
+  TaskDeleteToolDetails,
   TaskMutationToolDependencies,
   TaskUpdateToolDetails,
 };
 export {
   createTaskCommentCreateToolDefinition,
   createTaskCreateToolDefinition,
+  createTaskDeleteToolDefinition,
   createTaskUpdateToolDefinition,
   normalizeCreateTaskInput,
   normalizeTaskCommentInput,

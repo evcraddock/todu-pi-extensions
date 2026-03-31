@@ -616,4 +616,38 @@ describe("createToduDaemonClient", () => {
     );
     expect(listener).toHaveBeenCalledWith({ name: "data.changed", payload: { ok: true } });
   });
+
+  it("deletes a task through task.delete", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({ ok: true, value: null });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    const result = await client.deleteTask("task-1");
+
+    expect(result).toEqual({ taskId: "task-1", deleted: true });
+    expect(connection.request).toHaveBeenCalledWith("task.delete", { id: "task-1" });
+  });
+
+  it("throws a client error when task.delete fails", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Task not found" },
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.deleteTask("task-missing")).rejects.toThrow("task.delete failed");
+  });
 });

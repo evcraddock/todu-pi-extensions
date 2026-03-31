@@ -50,6 +50,7 @@ const createToduTaskService = ({ client }: ToduTaskServiceDependencies): TaskSer
     }),
   addTaskComment: (input) =>
     runTaskServiceOperation("addTaskComment", () => client.addTaskComment(input)),
+  deleteTask: (taskId) => runTaskServiceOperation("deleteTask", () => client.deleteTask(taskId)),
   listProjects: () => runTaskServiceOperation("listProjects", () => client.listProjects()),
   getProject: (projectId) =>
     runTaskServiceOperation("getProject", () => client.getProject(projectId)),

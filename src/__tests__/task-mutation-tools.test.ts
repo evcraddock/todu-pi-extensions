@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { ProjectSummary, TaskComment, TaskDetail } from "@/domain/task";
 import { registerTools } from "@/extension/register-tools";
 import type { TaskService } from "@/services/task-service";
+import { ToduTaskServiceError } from "@/services/todu/todu-task-service";
 import {
   createTaskCommentCreateToolDefinition,
   createTaskCreateToolDefinition,
+  createTaskDeleteToolDefinition,
   createTaskUpdateToolDefinition,
   normalizeCreateTaskInput,
   normalizeTaskCommentInput,
@@ -478,5 +480,86 @@ describe("createTaskCommentCreateToolDefinition", () => {
         content: "Added a note",
       })
     ).rejects.toThrow("task_comment_create failed: daemon unavailable");
+  });
+});
+
+describe("registerTools", () => {
+  it("registers the task_delete tool", () => {
+    const pi = { registerTool: vi.fn() };
+
+    registerTools(pi as never, {
+      getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+    });
+
+    const registeredToolNames = pi.registerTool.mock.calls.map(([tool]) => tool.name);
+    expect(registeredToolNames).toEqual(expect.arrayContaining(["task_delete"]));
+  });
+});
+
+describe("createTaskDeleteToolDefinition", () => {
+  it("deletes a task and returns structured details", async () => {
+    const taskService = {
+      deleteTask: vi.fn().mockResolvedValue({ taskId: "task-1", deleted: true }),
+    } as unknown as TaskService;
+
+    const tool = createTaskDeleteToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tc-1", { taskId: "task-1" });
+
+    expect(result.content[0]?.text).toContain("Deleted task task-1");
+    expect(result.details).toMatchObject({
+      kind: "task_delete",
+      taskId: "task-1",
+      found: true,
+      deleted: true,
+    });
+  });
+
+  it("returns not-found when task does not exist", async () => {
+    const taskService = {
+      deleteTask: vi.fn().mockRejectedValue(
+        new ToduTaskServiceError({
+          operation: "deleteTask",
+          causeCode: "not-found",
+          message: "deleteTask failed",
+        })
+      ),
+    } as unknown as TaskService;
+
+    const tool = createTaskDeleteToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tc-1", { taskId: "task-missing" });
+
+    expect(result.content[0]?.text).toContain("Task not found: task-missing");
+    expect(result.details).toMatchObject({
+      kind: "task_delete",
+      taskId: "task-missing",
+      found: false,
+      deleted: false,
+    });
+  });
+
+  it("rejects empty taskId", async () => {
+    const tool = createTaskDeleteToolDefinition({
+      getTaskService: vi.fn(),
+    });
+
+    await expect(tool.execute("tc-1", { taskId: "  " })).rejects.toThrow("taskId is required");
+  });
+
+  it("throws on non-not-found service errors", async () => {
+    const taskService = {
+      deleteTask: vi.fn().mockRejectedValue(new Error("connection lost")),
+    } as unknown as TaskService;
+
+    const tool = createTaskDeleteToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    await expect(tool.execute("tc-1", { taskId: "task-1" })).rejects.toThrow("task_delete failed");
   });
 });
