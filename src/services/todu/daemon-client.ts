@@ -47,7 +47,12 @@ import type {
   DeleteRecurringResult,
   UpdateRecurringInput,
 } from "../recurring-service";
-import type { AddTaskCommentInput, CreateTaskInput, UpdateTaskInput } from "../task-service";
+import type {
+  AddTaskCommentInput,
+  CreateTaskInput,
+  DeleteTaskResult,
+  UpdateTaskInput,
+} from "../task-service";
 import type { ToduDaemonConnection, ToduDaemonConnectionError } from "./daemon-connection";
 import type {
   ToduDaemonEvent,
@@ -110,6 +115,7 @@ export interface ToduDaemonClient {
   deleteRecurring(recurringId: string): Promise<DeleteRecurringResult>;
   listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
   createIntegrationBinding(input: CreateIntegrationBindingInput): Promise<IntegrationBinding>;
+  deleteTask(taskId: TaskId): Promise<DeleteTaskResult>;
   listHabits(filter?: HabitFilter): Promise<HabitSummary[]>;
   getHabit(habitId: string): Promise<HabitDetail | null>;
   createHabit(input: CreateHabitInput): Promise<HabitDetail>;
@@ -186,6 +192,18 @@ const createToduDaemonClient = ({
     }
 
     return mapTaskComment(noteResult.value);
+  },
+
+  async deleteTask(taskId: TaskId): Promise<DeleteTaskResult> {
+    const result = await connection.request<null>("task.delete", { id: taskId });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("task.delete", result.error);
+    }
+
+    return {
+      taskId,
+      deleted: true,
+    };
   },
 
   async listProjects(): Promise<ToduProjectSummary[]> {

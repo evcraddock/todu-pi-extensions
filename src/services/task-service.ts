@@ -29,6 +29,11 @@ export interface AddTaskCommentInput {
   content: string;
 }
 
+export interface DeleteTaskResult {
+  taskId: TaskId;
+  deleted: true;
+}
+
 export interface TaskService {
   listTasks(filter?: TaskFilter): Promise<TaskSummary[]>;
   getTask(taskId: TaskId): Promise<TaskDetail | null>;
@@ -39,5 +44,6 @@ export interface TaskService {
   // Future project-specific work should prefer ProjectService.
   listProjects(): Promise<ProjectSummary[]>;
   getProject(projectId: string): Promise<ProjectSummary | null>;
+  deleteTask(taskId: TaskId): Promise<DeleteTaskResult>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
 }
