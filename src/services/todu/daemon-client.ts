@@ -1,4 +1,7 @@
 import type {
+  Habit as ToduHabit,
+  HabitFilter as ToduHabitFilter,
+  HabitStreak as ToduHabitStreak,
   IntegrationBinding as ToduIntegrationBinding,
   IntegrationBindingFilter as ToduIntegrationBindingFilter,
   Note as ToduNote,
@@ -12,6 +15,7 @@ import type {
   TaskWithDetail as ToduTaskWithDetail,
 } from "@todu/core";
 
+import type { HabitCheckResult, HabitDetail, HabitFilter, HabitSummary } from "../../domain/habit";
 import type {
   RecurringFilter,
   RecurringTemplateDetail,
@@ -27,6 +31,7 @@ import type {
   TaskStatus,
   TaskSummary,
 } from "../../domain/task";
+import type { CreateHabitInput, DeleteHabitResult, UpdateHabitInput } from "../habit-service";
 import type {
   CreateIntegrationBindingInput,
   IntegrationBinding,
@@ -105,6 +110,12 @@ export interface ToduDaemonClient {
   deleteRecurring(recurringId: string): Promise<DeleteRecurringResult>;
   listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
   createIntegrationBinding(input: CreateIntegrationBindingInput): Promise<IntegrationBinding>;
+  listHabits(filter?: HabitFilter): Promise<HabitSummary[]>;
+  getHabit(habitId: string): Promise<HabitDetail | null>;
+  createHabit(input: CreateHabitInput): Promise<HabitDetail>;
+  updateHabit(input: UpdateHabitInput): Promise<HabitDetail>;
+  checkHabit(habitId: string): Promise<HabitCheckResult>;
+  deleteHabit(habitId: string): Promise<DeleteHabitResult>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
   on(
     eventName: ToduDaemonEventName,
@@ -321,6 +332,81 @@ const createToduDaemonClient = ({
     return mapIntegrationBinding(result.value);
   },
 
+  async listHabits(filter: HabitFilter = {}): Promise<HabitSummary[]> {
+    const result = await connection.request<ToduHabit[]>("habit.list", {
+      filter: mapHabitFilter(filter),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("habit.list", result.error);
+    }
+
+    return result.value.map(mapHabitSummary);
+  },
+
+  async getHabit(habitId: string): Promise<HabitDetail | null> {
+    const result = await connection.request<ToduHabit>("habit.get", { id: habitId });
+    if (!result.ok) {
+      if (result.error.code === "NOT_FOUND") {
+        return null;
+      }
+
+      throw mapDaemonErrorToClientError("habit.get", result.error);
+    }
+
+    return mapHabitDetail(result.value);
+  },
+
+  async createHabit(input: CreateHabitInput): Promise<HabitDetail> {
+    const result = await connection.request<ToduHabit>("habit.create", {
+      input: mapCreateHabitInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("habit.create", result.error);
+    }
+
+    return mapHabitDetail(result.value);
+  },
+
+  async updateHabit(input: UpdateHabitInput): Promise<HabitDetail> {
+    const result = await connection.request<ToduHabit>("habit.update", {
+      id: input.habitId,
+      input: mapUpdateHabitInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("habit.update", result.error);
+    }
+
+    return mapHabitDetail(result.value);
+  },
+
+  async checkHabit(habitId: string): Promise<HabitCheckResult> {
+    const result = await connection.request<{
+      habit: ToduHabit;
+      date: string;
+      completed: boolean;
+      streak: ToduHabitStreak;
+    }>("habit.check", {
+      id: habitId,
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("habit.check", result.error);
+    }
+
+    return mapHabitCheckResult(result.value, habitId);
+  },
+
+  async deleteHabit(habitId: string): Promise<DeleteHabitResult> {
+    const result = await connection.request<null>("habit.delete", { id: habitId });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("habit.delete", result.error);
+    }
+
+    return {
+      habitId,
+      deleted: true,
+    };
+  },
+
   async listTaskComments(taskId: TaskId): Promise<TaskComment[]> {
     return fetchTaskComments(connection, taskId);
   },
@@ -448,6 +534,65 @@ const mapRecurringTemplateDetail = (template: ToduRecurringTemplate): RecurringT
   skippedDates: [...template.skippedDates],
   createdAt: template.createdAt,
   updatedAt: template.updatedAt,
+});
+
+const mapHabitSummary = (habit: ToduHabit): HabitSummary => ({
+  id: habit.id,
+  title: habit.title,
+  projectId: habit.projectId,
+  projectName: null,
+  schedule: habit.schedule,
+  timezone: habit.timezone,
+  startDate: habit.startDate,
+  endDate: habit.endDate ?? null,
+  nextDue: habit.nextDue,
+  paused: habit.paused,
+});
+
+const mapHabitDetail = (habit: ToduHabit): HabitDetail => ({
+  ...mapHabitSummary(habit),
+  description: habit.description ?? null,
+  createdAt: habit.createdAt,
+  updatedAt: habit.updatedAt,
+});
+
+const mapHabitCheckResult = (
+  result: { habit: ToduHabit; date: string; completed: boolean; streak: ToduHabitStreak },
+  habitId: string
+): HabitCheckResult => ({
+  habitId,
+  date: result.date,
+  completed: result.completed,
+  streak: {
+    current: result.streak.current,
+    longest: result.streak.longest,
+    completedToday: result.streak.completedToday,
+    totalCheckins: result.streak.totalCheckins,
+  },
+});
+
+const mapCreateHabitInput = (input: CreateHabitInput): Record<string, unknown> => ({
+  title: input.title,
+  projectId: input.projectId,
+  schedule: input.schedule,
+  timezone: input.timezone,
+  startDate: input.startDate,
+  description: input.description ?? undefined,
+  endDate: input.endDate ?? undefined,
+});
+
+const mapUpdateHabitInput = (input: UpdateHabitInput): Record<string, unknown> => ({
+  title: input.title ?? undefined,
+  schedule: input.schedule ?? undefined,
+  timezone: input.timezone ?? undefined,
+  description: input.description ?? undefined,
+  endDate: input.endDate ?? undefined,
+});
+
+const mapHabitFilter = (filter: HabitFilter): ToduHabitFilter => ({
+  paused: filter.paused,
+  projectId: filter.projectId as ToduHabitFilter["projectId"],
+  search: filter.query,
 });
 
 const mapCreateProjectInput = (input: CreateProjectInput): Record<string, unknown> => ({
@@ -635,14 +780,20 @@ const toRemoteProjectStatus = (status: ProjectSummary["status"]): string =>
 
 export {
   createToduDaemonClient,
+  mapCreateHabitInput,
   mapCreateIntegrationBindingInput,
   mapCreateProjectInput,
   mapCreateRecurringInput,
   mapDaemonErrorToClientError,
+  mapHabitCheckResult,
+  mapHabitDetail,
+  mapHabitFilter,
+  mapHabitSummary,
   mapIntegrationBindingFilter,
   mapRecurringFilter,
   mapRecurringTemplateDetail,
   mapRecurringTemplateSummary,
+  mapUpdateHabitInput,
   mapUpdateProjectInput,
   mapUpdateRecurringInput,
   toLocalTaskStatus,

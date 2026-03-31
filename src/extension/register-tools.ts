@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
+import type { HabitService } from "../services/habit-service";
 import type { ProjectIntegrationService } from "../services/project-integration-service";
 import {
   createProjectServiceFromTaskService,
@@ -8,6 +9,8 @@ import {
 import type { RecurringService } from "../services/recurring-service";
 import type { TaskService } from "../services/task-service";
 import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-service";
+import { registerHabitMutationTools } from "../tools/habit-mutation-tools";
+import { registerHabitReadTools } from "../tools/habit-read-tools";
 import { registerProjectIntegrationTools } from "../tools/project-integration-tools";
 import { registerProjectMutationTools } from "../tools/project-mutation-tools";
 import { registerProjectReadTools } from "../tools/project-read-tools";
@@ -20,6 +23,7 @@ export interface RegisterToolDependencies {
   getTaskService?: () => Promise<TaskService>;
   getProjectService?: () => Promise<ProjectService>;
   getRecurringService?: () => Promise<RecurringService>;
+  getHabitService?: () => Promise<HabitService>;
   getProjectIntegrationService?: () => Promise<ProjectIntegrationService>;
 }
 
@@ -33,6 +37,8 @@ const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies 
       : () => runtime.ensureProjectServiceConnected());
   const getRecurringService =
     dependencies.getRecurringService ?? (() => runtime.ensureRecurringServiceConnected());
+  const getHabitService =
+    dependencies.getHabitService ?? (() => runtime.ensureHabitServiceConnected());
   const getProjectIntegrationService =
     dependencies.getProjectIntegrationService ??
     (() => runtime.ensureProjectIntegrationServiceConnected());
@@ -43,6 +49,8 @@ const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies 
   registerProjectMutationTools(pi, { getProjectService });
   registerRecurringReadTools(pi, { getRecurringService });
   registerRecurringMutationTools(pi, { getRecurringService, getProjectService });
+  registerHabitReadTools(pi, { getHabitService });
+  registerHabitMutationTools(pi, { getHabitService, getProjectService });
   registerTaskMutationTools(pi, { getTaskService });
 };
 
