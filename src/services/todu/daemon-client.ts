@@ -3,12 +3,20 @@ import type {
   IntegrationBindingFilter as ToduIntegrationBindingFilter,
   Note as ToduNote,
   Project as ToduProject,
+  RecurringFilter as ToduRecurringFilter,
+  RecurringTemplate as ToduRecurringTemplate,
+  RecurringMissPolicy as ToduRecurringMissPolicy,
   Task as ToduTask,
   TaskPriority as ToduTaskPriority,
   TaskStatus as ToduTaskStatus,
   TaskWithDetail as ToduTaskWithDetail,
 } from "@todu/core";
 
+import type {
+  RecurringFilter,
+  RecurringTemplateDetail,
+  RecurringTemplateSummary,
+} from "../../domain/recurring";
 import type {
   ProjectSummary,
   TaskComment,
@@ -29,6 +37,11 @@ import type {
   DeleteProjectResult,
   UpdateProjectInput as UpdateLocalProjectInput,
 } from "../project-service";
+import type {
+  CreateRecurringInput,
+  DeleteRecurringResult,
+  UpdateRecurringInput,
+} from "../recurring-service";
 import type { AddTaskCommentInput, CreateTaskInput, UpdateTaskInput } from "../task-service";
 import type { ToduDaemonConnection, ToduDaemonConnectionError } from "./daemon-connection";
 import type {
@@ -85,6 +98,11 @@ export interface ToduDaemonClient {
   createProject(input: CreateProjectInput): Promise<ToduProjectSummary>;
   updateProject(input: UpdateLocalProjectInput): Promise<ToduProjectSummary>;
   deleteProject(projectId: string): Promise<DeleteProjectResult>;
+  listRecurring(filter?: RecurringFilter): Promise<RecurringTemplateSummary[]>;
+  getRecurring(recurringId: string): Promise<RecurringTemplateDetail | null>;
+  createRecurring(input: CreateRecurringInput): Promise<RecurringTemplateDetail>;
+  updateRecurring(input: UpdateRecurringInput): Promise<RecurringTemplateDetail>;
+  deleteRecurring(recurringId: string): Promise<DeleteRecurringResult>;
   listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
   createIntegrationBinding(input: CreateIntegrationBindingInput): Promise<IntegrationBinding>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
@@ -212,6 +230,67 @@ const createToduDaemonClient = ({
 
     return {
       projectId,
+      deleted: true,
+    };
+  },
+
+  async listRecurring(filter: RecurringFilter = {}): Promise<RecurringTemplateSummary[]> {
+    const result = await connection.request<ToduRecurringTemplate[]>("recurring.list", {
+      filter: mapRecurringFilter(filter),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("recurring.list", result.error);
+    }
+
+    return result.value.map(mapRecurringTemplateSummary);
+  },
+
+  async getRecurring(recurringId: string): Promise<RecurringTemplateDetail | null> {
+    const result = await connection.request<ToduRecurringTemplate>("recurring.get", {
+      id: recurringId,
+    });
+    if (!result.ok) {
+      if (result.error.code === "NOT_FOUND") {
+        return null;
+      }
+
+      throw mapDaemonErrorToClientError("recurring.get", result.error);
+    }
+
+    return mapRecurringTemplateDetail(result.value);
+  },
+
+  async createRecurring(input: CreateRecurringInput): Promise<RecurringTemplateDetail> {
+    const result = await connection.request<ToduRecurringTemplate>("recurring.create", {
+      input: mapCreateRecurringInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("recurring.create", result.error);
+    }
+
+    return mapRecurringTemplateDetail(result.value);
+  },
+
+  async updateRecurring(input: UpdateRecurringInput): Promise<RecurringTemplateDetail> {
+    const result = await connection.request<ToduRecurringTemplate>("recurring.update", {
+      id: input.recurringId,
+      input: mapUpdateRecurringInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("recurring.update", result.error);
+    }
+
+    return mapRecurringTemplateDetail(result.value);
+  },
+
+  async deleteRecurring(recurringId: string): Promise<DeleteRecurringResult> {
+    const result = await connection.request<null>("recurring.delete", { id: recurringId });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("recurring.delete", result.error);
+    }
+
+    return {
+      recurringId,
       deleted: true,
     };
   },
@@ -345,6 +424,32 @@ const mapIntegrationBinding = (binding: ToduIntegrationBinding): IntegrationBind
   updatedAt: binding.updatedAt,
 });
 
+const mapRecurringTemplateSummary = (
+  template: ToduRecurringTemplate
+): RecurringTemplateSummary => ({
+  id: template.id,
+  title: template.title,
+  projectId: template.projectId,
+  projectName: null,
+  priority: toLocalTaskPriority(template.priority),
+  schedule: template.schedule,
+  timezone: template.timezone,
+  startDate: template.startDate,
+  endDate: template.endDate ?? null,
+  nextDue: template.nextDue,
+  missPolicy: toLocalRecurringMissPolicy(template.missPolicy),
+  paused: template.paused,
+});
+
+const mapRecurringTemplateDetail = (template: ToduRecurringTemplate): RecurringTemplateDetail => ({
+  ...mapRecurringTemplateSummary(template),
+  description: template.description ?? null,
+  labels: [...template.labels],
+  skippedDates: [...template.skippedDates],
+  createdAt: template.createdAt,
+  updatedAt: template.updatedAt,
+});
+
 const mapCreateProjectInput = (input: CreateProjectInput): Record<string, unknown> => ({
   name: input.name,
   description: input.description ?? undefined,
@@ -358,12 +463,43 @@ const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, u
   priority: input.priority ?? undefined,
 });
 
+const mapCreateRecurringInput = (input: CreateRecurringInput): Record<string, unknown> => ({
+  title: input.title,
+  projectId: input.projectId,
+  schedule: input.schedule,
+  timezone: input.timezone,
+  startDate: input.startDate,
+  description: input.description ?? undefined,
+  priority: input.priority ?? undefined,
+  endDate: input.endDate ?? undefined,
+  missPolicy: input.missPolicy ? toRemoteRecurringMissPolicy(input.missPolicy) : undefined,
+});
+
+const mapUpdateRecurringInput = (input: UpdateRecurringInput): Record<string, unknown> => ({
+  title: input.title ?? undefined,
+  projectId: input.projectId ?? undefined,
+  schedule: input.schedule ?? undefined,
+  timezone: input.timezone ?? undefined,
+  startDate: input.startDate ?? undefined,
+  description: input.description ?? undefined,
+  priority: input.priority ?? undefined,
+  endDate: input.endDate ?? undefined,
+  missPolicy: input.missPolicy ? toRemoteRecurringMissPolicy(input.missPolicy) : undefined,
+  paused: input.paused ?? undefined,
+});
+
 const mapIntegrationBindingFilter = (
   filter: IntegrationBindingFilter
 ): ToduIntegrationBindingFilter => ({
   provider: filter.provider,
   projectId: filter.projectId as ToduIntegrationBindingFilter["projectId"],
   enabled: filter.enabled,
+});
+
+const mapRecurringFilter = (filter: RecurringFilter): ToduRecurringFilter => ({
+  paused: filter.paused,
+  projectId: filter.projectId as ToduRecurringFilter["projectId"],
+  search: filter.query,
 });
 
 const mapCreateIntegrationBindingInput = (
@@ -486,6 +622,14 @@ const toLocalTaskPriority = (priority: ToduTaskPriority): TaskPriority => priori
 
 const toRemoteTaskPriority = (priority: TaskPriority): ToduTaskPriority => priority;
 
+const toLocalRecurringMissPolicy = (
+  missPolicy: ToduRecurringMissPolicy | undefined
+): RecurringTemplateSummary["missPolicy"] => missPolicy ?? "accumulate";
+
+const toRemoteRecurringMissPolicy = (
+  missPolicy: RecurringTemplateSummary["missPolicy"]
+): ToduRecurringMissPolicy => missPolicy;
+
 const toRemoteProjectStatus = (status: ProjectSummary["status"]): string =>
   status === "cancelled" ? "canceled" : status;
 
@@ -493,9 +637,14 @@ export {
   createToduDaemonClient,
   mapCreateIntegrationBindingInput,
   mapCreateProjectInput,
+  mapCreateRecurringInput,
   mapDaemonErrorToClientError,
   mapIntegrationBindingFilter,
+  mapRecurringFilter,
+  mapRecurringTemplateDetail,
+  mapRecurringTemplateSummary,
   mapUpdateProjectInput,
+  mapUpdateRecurringInput,
   toLocalTaskStatus,
   toRemoteProjectStatus,
   toRemoteTaskStatus,

@@ -1,5 +1,6 @@
 import type { ProjectIntegrationService } from "../project-integration-service";
 import type { ProjectService } from "../project-service";
+import type { RecurringService } from "../recurring-service";
 import { createRepoContextService } from "../repo-context";
 import type { TaskService } from "../task-service";
 import { createToduDaemonClient, type ToduDaemonClient } from "./daemon-client";
@@ -10,6 +11,7 @@ import {
 } from "./daemon-connection";
 import { createToduProjectIntegrationService } from "./todu-project-integration-service";
 import { createToduProjectService } from "./todu-project-service";
+import { createToduRecurringService } from "./todu-recurring-service";
 import { createToduTaskService } from "./todu-task-service";
 
 export const DEFAULT_TODU_INITIAL_CONNECT_TIMEOUT_MS = 2_000;
@@ -19,9 +21,11 @@ export interface ToduTaskServiceRuntime {
   client: ToduDaemonClient;
   taskService: TaskService;
   projectService: ProjectService;
+  recurringService: RecurringService;
   projectIntegrationService: ProjectIntegrationService;
   ensureConnected(): Promise<TaskService>;
   ensureProjectServiceConnected(): Promise<ProjectService>;
+  ensureRecurringServiceConnected(): Promise<RecurringService>;
   ensureProjectIntegrationServiceConnected(): Promise<ProjectIntegrationService>;
   disconnect(): Promise<void>;
 }
@@ -37,6 +41,7 @@ const createToduTaskServiceRuntime = (
   const client = createToduDaemonClient({ connection });
   const taskService = createToduTaskService({ client });
   const projectService = createToduProjectService({ client });
+  const recurringService = createToduRecurringService({ client });
   const projectIntegrationService = createToduProjectIntegrationService({
     client,
     projectService,
@@ -52,6 +57,7 @@ const createToduTaskServiceRuntime = (
     client,
     taskService,
     projectService,
+    recurringService,
     projectIntegrationService,
     ensureConnected: async () => {
       if (connection.getState().status !== "connected") {
@@ -66,6 +72,13 @@ const createToduTaskServiceRuntime = (
       }
 
       return projectService;
+    },
+    ensureRecurringServiceConnected: async () => {
+      if (connection.getState().status !== "connected") {
+        await connectWithinTimeout(connection, initialConnectTimeoutMs);
+      }
+
+      return recurringService;
     },
     ensureProjectIntegrationServiceConnected: async () => {
       if (connection.getState().status !== "connected") {
