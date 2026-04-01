@@ -100,9 +100,7 @@ export interface ResolveDefaultProjectResult {
 export interface RegisterCommandDependencies {
   getTaskService?: () => Promise<TaskService>;
   getHabitService?: () => Promise<HabitService>;
-  resolveDefaultProject?: (
-    taskService: TaskService
-  ) => Promise<ResolveDefaultProjectResult | null>;
+  resolveDefaultProject?: (taskService: TaskService) => Promise<ResolveDefaultProjectResult | null>;
   getCurrentTaskId?: () => TaskId | null;
   clearCurrentTask?: (ctx: ExtensionCommandContext) => Promise<void>;
   promptTaskTitle?: (ctx: ExtensionCommandContext) => Promise<string | null>;
@@ -169,8 +167,7 @@ const createTasksCommandHandler = (
   const getTaskBrowseFilterController = () =>
     dependencies.taskBrowseFilterController ?? getDefaultTaskBrowseFilterContextController();
   const editTaskBrowseFilters = dependencies.editTaskBrowseFilters ?? showTaskBrowseFilterMode;
-  const resolveDefaultProject =
-    dependencies.resolveDefaultProject ?? resolveDefaultProjectFromRepo;
+  const resolveDefaultProject = dependencies.resolveDefaultProject ?? resolveDefaultProjectFromRepo;
   const loadTasks = dependencies.loadTasks ?? loadTasksWithLoader;
   const showTaskBrowseView = dependencies.showTaskBrowseView ?? selectTaskBrowseViewAction;
   const showEmptyState = dependencies.showEmptyState ?? showEmptyTasksState;
@@ -1733,9 +1730,7 @@ const resolveRequestedTaskId = (args: string, currentTaskId: TaskId | null): Tas
 
 const resolveDefaultTaskBrowseFilterState = async (
   taskService: TaskService,
-  resolveDefaultProject: (
-    taskService: TaskService
-  ) => Promise<ResolveDefaultProjectResult | null>
+  resolveDefaultProject: (taskService: TaskService) => Promise<ResolveDefaultProjectResult | null>
 ): Promise<TaskBrowseFilterState> => {
   const project = await resolveDefaultProject(taskService).catch(() => null);
   return createTaskBrowseFilterState({
@@ -1784,7 +1779,10 @@ const matchProjectByName = (
   const normalized = candidateName.toLowerCase();
   return (
     projects.find((project) => project.name.toLowerCase() === normalized) ??
-    projects.find((project) => project.name.toLowerCase().replace(/[\s_-]+/g, "-") === normalized.replace(/[\s_-]+/g, "-")) ??
+    projects.find(
+      (project) =>
+        project.name.toLowerCase().replace(/[\s_-]+/g, "-") === normalized.replace(/[\s_-]+/g, "-")
+    ) ??
     null
   );
 };

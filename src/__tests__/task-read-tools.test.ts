@@ -64,6 +64,39 @@ describe("normalizeTaskListFilter", () => {
       priorities: undefined,
       projectId: undefined,
       query: undefined,
+      from: undefined,
+      to: undefined,
+      label: undefined,
+      overdue: undefined,
+      today: undefined,
+      sort: undefined,
+      sortDirection: undefined,
+    });
+  });
+
+  it("preserves new filter fields when provided", () => {
+    expect(
+      normalizeTaskListFilter({
+        from: "2026-01-01",
+        to: "2026-03-31",
+        label: "tools",
+        overdue: true,
+        today: false,
+        sort: "createdAt",
+        sortDirection: "asc",
+      })
+    ).toEqual({
+      statuses: undefined,
+      priorities: undefined,
+      projectId: undefined,
+      query: undefined,
+      from: "2026-01-01",
+      to: "2026-03-31",
+      label: "tools",
+      overdue: true,
+      today: false,
+      sort: "createdAt",
+      sortDirection: "asc",
     });
   });
 });
@@ -90,6 +123,13 @@ describe("createTaskListToolDefinition", () => {
       priorities: ["high"],
       projectId: "proj-1",
       query: "task tools",
+      from: undefined,
+      to: undefined,
+      label: undefined,
+      overdue: undefined,
+      today: undefined,
+      sort: undefined,
+      sortDirection: undefined,
     });
     expect(result.content[0]?.type).toBe("text");
     expect(result.content[0]?.text).toContain("Tasks (1):");
@@ -101,6 +141,13 @@ describe("createTaskListToolDefinition", () => {
         priorities: ["high"],
         projectId: "proj-1",
         query: "task tools",
+        from: undefined,
+        to: undefined,
+        label: undefined,
+        overdue: undefined,
+        today: undefined,
+        sort: undefined,
+        sortDirection: undefined,
       },
       tasks,
       total: 1,
@@ -126,6 +173,13 @@ describe("createTaskListToolDefinition", () => {
         priorities: undefined,
         projectId: undefined,
         query: undefined,
+        from: undefined,
+        to: undefined,
+        label: undefined,
+        overdue: undefined,
+        today: undefined,
+        sort: undefined,
+        sortDirection: undefined,
       },
       tasks: [],
       total: 0,
