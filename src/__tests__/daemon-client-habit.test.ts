@@ -237,6 +237,40 @@ describe("createToduDaemonClient habit support", () => {
     expect(connection.request).toHaveBeenCalledWith("habit.check", { id: "habit-1" });
   });
 
+  it("checks a habit through habit.check when streak is missing", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: {
+        habit: {
+          id: "habit-1",
+          title: "Morning meditation",
+          projectId: "proj-1",
+          schedule: "FREQ=DAILY",
+          timezone: "America/Chicago",
+          startDate: "2026-03-01",
+          nextDue: "2026-04-01",
+          paused: false,
+          createdAt: "2026-03-01T00:00:00.000Z",
+          updatedAt: "2026-03-31T00:00:00.000Z",
+        },
+        date: "2026-03-31",
+        completed: true,
+      },
+    });
+
+    const client = createClient(connection);
+    const result = await client.checkHabit("habit-1");
+
+    expect(result).toEqual({
+      habitId: "habit-1",
+      date: "2026-03-31",
+      completed: true,
+      streak: undefined,
+    });
+    expect(connection.request).toHaveBeenCalledWith("habit.check", { id: "habit-1" });
+  });
+
   it("deletes a habit through habit.delete", async () => {
     const connection = createConnectionMock();
     connection.request.mockResolvedValue({ ok: true, value: null });
