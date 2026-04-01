@@ -12,6 +12,7 @@ import type {
   TaskStatus,
   TaskSummary,
 } from "../domain/task";
+import { getSystemTimezone } from "../utils/timezone";
 import { browseTasks } from "../flows/browse-tasks";
 import { showTaskDetail } from "../flows/show-task-detail";
 import type { TaskService } from "../services/task-service";
@@ -51,6 +52,7 @@ const TaskListParams = Type.Object({
       description: "Sort direction (asc or desc)",
     })
   ),
+  timezone: Type.Optional(Type.String({ description: "IANA timezone (auto-detected if omitted)" })),
 });
 
 const TaskShowParams = Type.Object({
@@ -69,6 +71,7 @@ interface TaskListToolParams {
   today?: boolean;
   sort?: TaskSortField;
   sortDirection?: TaskSortDirection;
+  timezone?: string;
 }
 
 interface TaskShowToolParams {
@@ -192,6 +195,7 @@ const normalizeTaskListFilter = (params: TaskListToolParams): TaskFilter => ({
   today: params.today ?? undefined,
   sort: params.sort ?? undefined,
   sortDirection: params.sortDirection ?? undefined,
+  timezone: normalizeOptionalText(params.timezone) ?? getSystemTimezone(),
 });
 
 const normalizeArrayFilter = <TValue extends string>(

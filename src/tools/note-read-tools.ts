@@ -4,6 +4,7 @@ import { Type } from "@sinclair/typebox";
 
 import type { NoteEntityType, NoteFilter, NoteSummary } from "../domain/note";
 import type { NoteService } from "../services/note-service";
+import { getSystemTimezone } from "../utils/timezone";
 
 const NOTE_ENTITY_TYPE_VALUES = ["task", "project", "habit"] as const;
 const MAX_NOTE_LIST_PREVIEW_COUNT = 25;
@@ -25,6 +26,7 @@ const NoteListParams = Type.Object({
   journal: Type.Optional(
     Type.Boolean({ description: "Filter to standalone journal entries only" })
   ),
+  timezone: Type.Optional(Type.String({ description: "IANA timezone (auto-detected if omitted)" })),
 });
 
 interface NoteListToolParams {
@@ -35,6 +37,7 @@ interface NoteListToolParams {
   from?: string;
   to?: string;
   journal?: boolean;
+  timezone?: string;
 }
 
 interface NoteListToolDetails {
@@ -101,6 +104,7 @@ const normalizeNoteListFilter = (params: NoteListToolParams): NoteFilter => ({
   from: normalizeOptionalText(params.from),
   to: normalizeOptionalText(params.to),
   journal: params.journal ?? undefined,
+  timezone: normalizeOptionalText(params.timezone) ?? getSystemTimezone(),
 });
 
 const normalizeOptionalText = (value: string | null | undefined): string | undefined => {

@@ -53,4 +53,5 @@ export interface TaskFilter {
   today?: boolean;
   sort?: TaskSortField;
   sortDirection?: TaskSortDirection;
+  timezone?: string;
 }

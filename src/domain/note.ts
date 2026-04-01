@@ -20,4 +20,5 @@ export interface NoteFilter {
   from?: string;
   to?: string;
   journal?: boolean;
+  timezone?: string;
 }

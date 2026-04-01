@@ -640,6 +640,7 @@ const mapNoteFilter = (filter: NoteFilter): ToduNoteFilter => ({
   createdFrom: filter.from,
   createdTo: filter.to,
   journal: filter.journal,
+  timezone: filter.timezone,
 });
 
 const mapProjectSummary = (project: ToduProject): ToduProjectSummary => ({
@@ -829,6 +830,9 @@ const mapTaskFilter = (filter: TaskFilter): Record<string, unknown> => {
     label: filter.label,
     overdue: filter.overdue,
     today: filter.today,
+    createdFrom: filter.from,
+    createdTo: filter.to,
+    timezone: filter.timezone,
   };
 };
 
@@ -876,20 +880,6 @@ const matchesTaskFilter = (task: ToduTask, filter: TaskFilter): boolean => {
 
   if (filter.label && !task.labels.includes(filter.label)) {
     return false;
-  }
-
-  if (filter.from) {
-    const fromDate = filter.from;
-    if (task.createdAt < fromDate) {
-      return false;
-    }
-  }
-
-  if (filter.to) {
-    const toDate = filter.to + "T23:59:59.999Z";
-    if (task.createdAt > toDate) {
-      return false;
-    }
   }
 
   return true;
