@@ -52,8 +52,117 @@ describe("createToduDaemonClient", () => {
         projectId: undefined,
         priority: undefined,
         status: "canceled",
+        label: undefined,
+        overdue: undefined,
+        today: undefined,
       },
     });
+  });
+
+  it("passes label, overdue, and today filters to the daemon", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({ ok: true, value: [] });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await client.listTasks({ label: "urgent", overdue: true, today: false });
+
+    expect(connection.request).toHaveBeenCalledWith("task.list", {
+      filter: expect.objectContaining({
+        label: "urgent",
+        overdue: true,
+        today: false,
+      }),
+    });
+  });
+
+  it("filters tasks by created-at date range client-side", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "task-old",
+          title: "Old task",
+          status: "done",
+          priority: "low",
+          projectId: "proj-1",
+          labels: [],
+          assignees: [],
+          createdAt: "2025-12-01T00:00:00.000Z",
+          updatedAt: "2025-12-01T00:00:00.000Z",
+        },
+        {
+          id: "task-new",
+          title: "New task",
+          status: "done",
+          priority: "low",
+          projectId: "proj-1",
+          labels: [],
+          assignees: [],
+          createdAt: "2026-03-15T00:00:00.000Z",
+          updatedAt: "2026-03-15T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    const tasks = await client.listTasks({ from: "2026-01-01", to: "2026-12-31" });
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.id).toBe("task-new");
+  });
+
+  it("sorts tasks by the requested field and direction", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "task-b",
+          title: "Bravo",
+          status: "active",
+          priority: "low",
+          projectId: "proj-1",
+          labels: [],
+          assignees: [],
+          createdAt: "2026-03-02T00:00:00.000Z",
+          updatedAt: "2026-03-02T00:00:00.000Z",
+        },
+        {
+          id: "task-a",
+          title: "Alpha",
+          status: "active",
+          priority: "high",
+          projectId: "proj-1",
+          labels: [],
+          assignees: [],
+          createdAt: "2026-03-01T00:00:00.000Z",
+          updatedAt: "2026-03-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    const tasks = await client.listTasks({ sort: "title", sortDirection: "asc" });
+    expect(tasks[0]?.id).toBe("task-a");
+    expect(tasks[1]?.id).toBe("task-b");
   });
 
   it("hydrates task detail with task notes", async () => {

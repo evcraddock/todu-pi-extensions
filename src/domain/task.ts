@@ -37,9 +37,20 @@ export interface TaskDetail extends TaskSummary {
   comments: TaskComment[];
 }
 
+export type TaskSortField = "priority" | "dueDate" | "createdAt" | "updatedAt" | "title";
+
+export type TaskSortDirection = "asc" | "desc";
+
 export interface TaskFilter {
   projectId?: ProjectId | null;
   statuses?: TaskStatus[];
   priorities?: TaskPriority[];
   query?: string;
+  from?: string;
+  to?: string;
+  label?: string;
+  overdue?: boolean;
+  today?: boolean;
+  sort?: TaskSortField;
+  sortDirection?: TaskSortDirection;
 }

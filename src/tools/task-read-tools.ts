@@ -7,6 +7,8 @@ import type {
   TaskFilter,
   TaskId,
   TaskPriority,
+  TaskSortDirection,
+  TaskSortField,
   TaskStatus,
   TaskSummary,
 } from "../domain/task";
@@ -16,6 +18,8 @@ import type { TaskService } from "../services/task-service";
 
 const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelled"] as const;
 const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
+const TASK_SORT_FIELD_VALUES = ["priority", "dueDate", "createdAt", "updatedAt", "title"] as const;
+const TASK_SORT_DIRECTION_VALUES = ["asc", "desc"] as const;
 const MAX_TASK_LIST_PREVIEW_COUNT = 25;
 const MAX_COMMENT_PREVIEW_COUNT = 5;
 
@@ -32,6 +36,21 @@ const TaskListParams = Type.Object({
   ),
   projectId: Type.Optional(Type.String({ description: "Optional project ID filter" })),
   query: Type.Optional(Type.String({ description: "Optional title search query" })),
+  from: Type.Optional(Type.String({ description: "Optional created-at start date (YYYY-MM-DD)" })),
+  to: Type.Optional(Type.String({ description: "Optional created-at end date (YYYY-MM-DD)" })),
+  label: Type.Optional(Type.String({ description: "Optional label filter" })),
+  overdue: Type.Optional(Type.Boolean({ description: "Show overdue tasks only" })),
+  today: Type.Optional(Type.Boolean({ description: "Show tasks due or scheduled today" })),
+  sort: Type.Optional(
+    StringEnum(TASK_SORT_FIELD_VALUES, {
+      description: "Sort by field (priority, dueDate, createdAt, updatedAt, title)",
+    })
+  ),
+  sortDirection: Type.Optional(
+    StringEnum(TASK_SORT_DIRECTION_VALUES, {
+      description: "Sort direction (asc or desc)",
+    })
+  ),
 });
 
 const TaskShowParams = Type.Object({
@@ -43,6 +62,13 @@ interface TaskListToolParams {
   priorities?: TaskPriority[];
   projectId?: string;
   query?: string;
+  from?: string;
+  to?: string;
+  label?: string;
+  overdue?: boolean;
+  today?: boolean;
+  sort?: TaskSortField;
+  sortDirection?: TaskSortDirection;
 }
 
 interface TaskShowToolParams {
@@ -71,7 +97,8 @@ interface TaskReadToolDependencies {
 const createTaskListToolDefinition = ({ getTaskService }: TaskReadToolDependencies) => ({
   name: "task_list",
   label: "Task List",
-  description: "List tasks with optional status, priority, project, or title filters.",
+  description:
+    "List tasks with optional status, priority, project, title, label, date range, overdue, today, and sort filters.",
   promptSnippet: "List tasks using structured filters for status, priority, project, or query.",
   promptGuidelines: [
     "Use this tool for backend task lookups in normal chat instead of slash-command task browsing.",
@@ -158,6 +185,13 @@ const normalizeTaskListFilter = (params: TaskListToolParams): TaskFilter => ({
   priorities: normalizeArrayFilter(params.priorities),
   projectId: normalizeOptionalText(params.projectId),
   query: normalizeOptionalText(params.query),
+  from: normalizeOptionalText(params.from),
+  to: normalizeOptionalText(params.to),
+  label: normalizeOptionalText(params.label),
+  overdue: params.overdue ?? undefined,
+  today: params.today ?? undefined,
+  sort: params.sort ?? undefined,
+  sortDirection: params.sortDirection ?? undefined,
 });
 
 const normalizeArrayFilter = <TValue extends string>(

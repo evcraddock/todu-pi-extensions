@@ -487,6 +487,8 @@ const listRawTasks = async (
   connection: Pick<ToduDaemonConnection, "request">,
   filter: TaskFilter
 ): Promise<ToduTask[]> => {
+  let tasks: ToduTask[];
+
   if (filter.query && filter.query.trim().length > 0) {
     const result = await connection.request<ToduTask[]>("task.search", {
       query: filter.query,
@@ -495,17 +497,53 @@ const listRawTasks = async (
       throw mapDaemonErrorToClientError("task.search", result.error);
     }
 
-    return result.value.filter((task) => matchesTaskFilter(task, filter));
+    tasks = result.value.filter((task) => matchesTaskFilter(task, filter));
+  } else {
+    const result = await connection.request<ToduTask[]>("task.list", {
+      filter: mapTaskFilter(filter),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("task.list", result.error);
+    }
+
+    tasks = result.value.filter((task) => matchesTaskFilter(task, filter));
   }
 
-  const result = await connection.request<ToduTask[]>("task.list", {
-    filter: mapTaskFilter(filter),
+  if (filter.sort) {
+    tasks = sortTasks(tasks, filter.sort, filter.sortDirection ?? "desc");
+  }
+
+  return tasks;
+};
+
+const sortTasks = (tasks: ToduTask[], field: string, direction: "asc" | "desc"): ToduTask[] => {
+  const sorted = [...tasks].sort((a, b) => {
+    const aVal = getTaskSortValue(a, field);
+    const bVal = getTaskSortValue(b, field);
+    if (aVal < bVal) return -1;
+    if (aVal > bVal) return 1;
+    return 0;
   });
-  if (!result.ok) {
-    throw mapDaemonErrorToClientError("task.list", result.error);
-  }
+  return direction === "asc" ? sorted : sorted.reverse();
+};
 
-  return result.value.filter((task) => matchesTaskFilter(task, filter));
+const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
+
+const getTaskSortValue = (task: ToduTask, field: string): string | number => {
+  switch (field) {
+    case "priority":
+      return PRIORITY_ORDER[task.priority] ?? 99;
+    case "dueDate":
+      return task.dueDate ?? "9999-12-31";
+    case "createdAt":
+      return task.createdAt;
+    case "updatedAt":
+      return task.updatedAt;
+    case "title":
+      return task.title.toLowerCase();
+    default:
+      return task.createdAt;
+  }
 };
 
 const fetchTaskComments = async (
@@ -733,6 +771,9 @@ const mapTaskFilter = (filter: TaskFilter): Record<string, unknown> => {
     projectId: filter.projectId,
     status: status?.length === 1 ? status[0] : status,
     priority,
+    label: filter.label,
+    overdue: filter.overdue,
+    today: filter.today,
   };
 };
 
@@ -774,6 +815,24 @@ const matchesTaskFilter = (task: ToduTask, filter: TaskFilter): boolean => {
   if (filter.query && filter.query.trim().length > 0) {
     const normalizedQuery = filter.query.trim().toLowerCase();
     if (!task.title.toLowerCase().includes(normalizedQuery)) {
+      return false;
+    }
+  }
+
+  if (filter.label && !task.labels.includes(filter.label)) {
+    return false;
+  }
+
+  if (filter.from) {
+    const fromDate = filter.from;
+    if (task.createdAt < fromDate) {
+      return false;
+    }
+  }
+
+  if (filter.to) {
+    const toDate = filter.to + "T23:59:59.999Z";
+    if (task.createdAt > toDate) {
       return false;
     }
   }
