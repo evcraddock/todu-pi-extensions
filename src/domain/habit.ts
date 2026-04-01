@@ -30,7 +30,7 @@ export interface HabitCheckResult {
   habitId: HabitId;
   date: string;
   completed: boolean;
-  streak: HabitStreak;
+  streak?: HabitStreak;
 }
 
 export interface HabitSummaryWithStreak extends HabitSummary {

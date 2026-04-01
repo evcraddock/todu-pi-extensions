@@ -503,10 +503,20 @@ const formatHabitUpdateContent = (habit: HabitDetail, input: UpdateHabitInput): 
 
 const formatHabitCheckContent = (result: HabitCheckResult): string => {
   const status = result.completed ? "checked in" : "unchecked";
-  return [
-    `Habit ${result.habitId}: ${status} for ${result.date}`,
-    `Streak: ${result.streak.current} current, ${result.streak.longest} longest, ${result.streak.totalCheckins} total`,
-  ].join("\n");
+  const streakLine = formatHabitCheckStreakLine(result.streak);
+  return [`Habit ${result.habitId}: ${status} for ${result.date}`, streakLine].join("\n");
+};
+
+const formatHabitCheckStreakLine = (streak: HabitCheckResult["streak"] | undefined): string => {
+  if (!streak) {
+    return "Streak: unavailable";
+  }
+
+  const current = typeof streak.current === "number" ? streak.current : "?";
+  const longest = typeof streak.longest === "number" ? streak.longest : "?";
+  const totalCheckins = typeof streak.totalCheckins === "number" ? streak.totalCheckins : "?";
+
+  return `Streak: ${current} current, ${longest} longest, ${totalCheckins} total`;
 };
 
 const formatHabitDeleteContent = (details: HabitDeleteToolDetails): string =>

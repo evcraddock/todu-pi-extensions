@@ -711,18 +711,20 @@ const mapHabitDetail = (habit: ToduHabit): HabitDetail => ({
 });
 
 const mapHabitCheckResult = (
-  result: { habit: ToduHabit; date: string; completed: boolean; streak: ToduHabitStreak },
+  result: { habit: ToduHabit; date: string; completed: boolean; streak?: ToduHabitStreak },
   habitId: string
 ): HabitCheckResult => ({
   habitId,
   date: result.date,
   completed: result.completed,
-  streak: {
-    current: result.streak.current,
-    longest: result.streak.longest,
-    completedToday: result.streak.completedToday,
-    totalCheckins: result.streak.totalCheckins,
-  },
+  streak: result.streak
+    ? {
+        current: result.streak.current,
+        longest: result.streak.longest,
+        completedToday: result.streak.completedToday,
+        totalCheckins: result.streak.totalCheckins,
+      }
+    : undefined,
 });
 
 const mapCreateHabitInput = (input: CreateHabitInput): Record<string, unknown> => ({
