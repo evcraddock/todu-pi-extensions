@@ -815,4 +815,93 @@ describe("createToduDaemonClient", () => {
       client.moveTask({ taskId: "task-missing", targetProjectId: "proj-2" })
     ).rejects.toThrow("task.move failed");
   });
+
+  it("lists notes with filter mapped to daemon NoteFilter", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "note-1",
+          content: "Journal entry",
+          author: "user",
+          tags: ["daily"],
+          createdAt: "2026-03-20T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    const notes = await client.listNotes({
+      tag: "daily",
+      from: "2026-03-01",
+      to: "2026-03-31",
+      journal: true,
+    });
+
+    expect(notes).toEqual([
+      {
+        id: "note-1",
+        content: "Journal entry",
+        author: "user",
+        entityType: null,
+        entityId: null,
+        tags: ["daily"],
+        createdAt: "2026-03-20T00:00:00.000Z",
+      },
+    ]);
+    expect(connection.request).toHaveBeenCalledWith("note.list", {
+      filter: {
+        entityType: undefined,
+        entityId: undefined,
+        tag: "daily",
+        author: undefined,
+        createdFrom: "2026-03-01",
+        createdTo: "2026-03-31",
+        journal: true,
+      },
+    });
+  });
+
+  it("maps entity type and id for scoped note queries", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: [
+        {
+          id: "note-2",
+          content: "Task comment",
+          author: "user",
+          entityType: "task",
+          entityId: "task-123",
+          tags: [],
+          createdAt: "2026-03-20T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    const notes = await client.listNotes({ entityType: "task", entityId: "task-123" });
+
+    expect(notes[0]?.entityType).toBe("task");
+    expect(notes[0]?.entityId).toBe("task-123");
+    expect(connection.request).toHaveBeenCalledWith("note.list", {
+      filter: expect.objectContaining({
+        entityType: "task",
+        entityId: "task-123",
+      }),
+    });
+  });
 });
