@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/utils/timezone", () => ({
+  getSystemTimezone: () => "America/Chicago",
+}));
+
 import type { NoteSummary } from "@/domain/note";
 import { registerTools } from "@/extension/register-tools";
 import type { NoteService } from "@/services/note-service";
@@ -51,6 +55,7 @@ describe("normalizeNoteListFilter", () => {
       from: undefined,
       to: undefined,
       journal: undefined,
+      timezone: "America/Chicago",
     });
   });
 
@@ -64,6 +69,7 @@ describe("normalizeNoteListFilter", () => {
         from: "2026-01-01",
         to: "2026-03-31",
         journal: true,
+        timezone: "America/Chicago",
       })
     ).toEqual({
       entityType: "task",
@@ -73,6 +79,7 @@ describe("normalizeNoteListFilter", () => {
       from: "2026-01-01",
       to: "2026-03-31",
       journal: true,
+      timezone: "America/Chicago",
     });
   });
 });
@@ -101,6 +108,7 @@ describe("createNoteListToolDefinition", () => {
       from: undefined,
       to: undefined,
       journal: undefined,
+      timezone: "America/Chicago",
     });
     expect(result.content[0]?.type).toBe("text");
     expect(result.content[0]?.text).toContain("Notes (1):");
@@ -115,6 +123,7 @@ describe("createNoteListToolDefinition", () => {
         from: undefined,
         to: undefined,
         journal: undefined,
+        timezone: "America/Chicago",
       },
       notes,
       total: 1,
@@ -143,6 +152,7 @@ describe("createNoteListToolDefinition", () => {
         from: undefined,
         to: undefined,
         journal: undefined,
+        timezone: "America/Chicago",
       },
       notes: [],
       total: 0,

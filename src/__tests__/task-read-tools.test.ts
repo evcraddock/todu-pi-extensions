@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/utils/timezone", () => ({
+  getSystemTimezone: () => "America/Chicago",
+}));
+
 import type { TaskDetail, TaskSummary } from "@/domain/task";
 import { registerTools } from "@/extension/register-tools";
 import type { TaskService } from "@/services/task-service";
@@ -71,6 +75,7 @@ describe("normalizeTaskListFilter", () => {
       today: undefined,
       sort: undefined,
       sortDirection: undefined,
+      timezone: "America/Chicago",
     });
   });
 
@@ -84,6 +89,7 @@ describe("normalizeTaskListFilter", () => {
         today: false,
         sort: "createdAt",
         sortDirection: "asc",
+        timezone: "America/Chicago",
       })
     ).toEqual({
       statuses: undefined,
@@ -97,6 +103,7 @@ describe("normalizeTaskListFilter", () => {
       today: false,
       sort: "createdAt",
       sortDirection: "asc",
+      timezone: "America/Chicago",
     });
   });
 });
@@ -130,6 +137,7 @@ describe("createTaskListToolDefinition", () => {
       today: undefined,
       sort: undefined,
       sortDirection: undefined,
+      timezone: "America/Chicago",
     });
     expect(result.content[0]?.type).toBe("text");
     expect(result.content[0]?.text).toContain("Tasks (1):");
@@ -148,6 +156,7 @@ describe("createTaskListToolDefinition", () => {
         today: undefined,
         sort: undefined,
         sortDirection: undefined,
+        timezone: "America/Chicago",
       },
       tasks,
       total: 1,
@@ -180,6 +189,7 @@ describe("createTaskListToolDefinition", () => {
         today: undefined,
         sort: undefined,
         sortDirection: undefined,
+        timezone: "America/Chicago",
       },
       tasks: [],
       total: 0,

@@ -55,6 +55,9 @@ describe("createToduDaemonClient", () => {
         label: undefined,
         overdue: undefined,
         today: undefined,
+        createdFrom: undefined,
+        createdTo: undefined,
+        timezone: undefined,
       },
     });
   });
@@ -81,35 +84,9 @@ describe("createToduDaemonClient", () => {
     });
   });
 
-  it("filters tasks by created-at date range client-side", async () => {
+  it("passes date range and timezone filters to the daemon", async () => {
     const connection = createConnectionMock();
-    connection.request.mockResolvedValue({
-      ok: true,
-      value: [
-        {
-          id: "task-old",
-          title: "Old task",
-          status: "done",
-          priority: "low",
-          projectId: "proj-1",
-          labels: [],
-          assignees: [],
-          createdAt: "2025-12-01T00:00:00.000Z",
-          updatedAt: "2025-12-01T00:00:00.000Z",
-        },
-        {
-          id: "task-new",
-          title: "New task",
-          status: "done",
-          priority: "low",
-          projectId: "proj-1",
-          labels: [],
-          assignees: [],
-          createdAt: "2026-03-15T00:00:00.000Z",
-          updatedAt: "2026-03-15T00:00:00.000Z",
-        },
-      ],
-    });
+    connection.request.mockResolvedValue({ ok: true, value: [] });
 
     const client = createToduDaemonClient({
       connection: connection as unknown as Pick<
@@ -118,9 +95,15 @@ describe("createToduDaemonClient", () => {
       >,
     });
 
-    const tasks = await client.listTasks({ from: "2026-01-01", to: "2026-12-31" });
-    expect(tasks).toHaveLength(1);
-    expect(tasks[0]?.id).toBe("task-new");
+    await client.listTasks({ from: "2026-01-01", to: "2026-12-31", timezone: "America/Chicago" });
+
+    expect(connection.request).toHaveBeenCalledWith("task.list", {
+      filter: expect.objectContaining({
+        createdFrom: "2026-01-01",
+        createdTo: "2026-12-31",
+        timezone: "America/Chicago",
+      }),
+    });
   });
 
   it("sorts tasks by the requested field and direction", async () => {
@@ -843,6 +826,7 @@ describe("createToduDaemonClient", () => {
       from: "2026-03-01",
       to: "2026-03-31",
       journal: true,
+      timezone: "America/Chicago",
     });
 
     expect(notes).toEqual([
@@ -865,6 +849,7 @@ describe("createToduDaemonClient", () => {
         createdFrom: "2026-03-01",
         createdTo: "2026-03-31",
         journal: true,
+        timezone: "America/Chicago",
       },
     });
   });
