@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 import type { HabitService } from "../services/habit-service";
+import type { NoteService } from "../services/note-service";
 import type { ProjectIntegrationService } from "../services/project-integration-service";
 import {
   createProjectServiceFromTaskService,
@@ -11,6 +12,7 @@ import type { TaskService } from "../services/task-service";
 import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-service";
 import { registerHabitMutationTools } from "../tools/habit-mutation-tools";
 import { registerHabitReadTools } from "../tools/habit-read-tools";
+import { registerNoteReadTools } from "../tools/note-read-tools";
 import { registerProjectIntegrationTools } from "../tools/project-integration-tools";
 import { registerProjectMutationTools } from "../tools/project-mutation-tools";
 import { registerProjectReadTools } from "../tools/project-read-tools";
@@ -24,6 +26,7 @@ export interface RegisterToolDependencies {
   getProjectService?: () => Promise<ProjectService>;
   getRecurringService?: () => Promise<RecurringService>;
   getHabitService?: () => Promise<HabitService>;
+  getNoteService?: () => Promise<NoteService>;
   getProjectIntegrationService?: () => Promise<ProjectIntegrationService>;
 }
 
@@ -39,6 +42,8 @@ const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies 
     dependencies.getRecurringService ?? (() => runtime.ensureRecurringServiceConnected());
   const getHabitService =
     dependencies.getHabitService ?? (() => runtime.ensureHabitServiceConnected());
+  const getNoteService =
+    dependencies.getNoteService ?? (() => runtime.ensureNoteServiceConnected());
   const getProjectIntegrationService =
     dependencies.getProjectIntegrationService ??
     (() => runtime.ensureProjectIntegrationServiceConnected());
@@ -51,6 +56,7 @@ const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies 
   registerRecurringMutationTools(pi, { getRecurringService, getProjectService });
   registerHabitReadTools(pi, { getHabitService });
   registerHabitMutationTools(pi, { getHabitService, getProjectService });
+  registerNoteReadTools(pi, { getNoteService });
   registerTaskMutationTools(pi, { getTaskService });
 };
 

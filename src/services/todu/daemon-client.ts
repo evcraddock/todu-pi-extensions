@@ -5,6 +5,7 @@ import type {
   IntegrationBinding as ToduIntegrationBinding,
   IntegrationBindingFilter as ToduIntegrationBindingFilter,
   Note as ToduNote,
+  NoteFilter as ToduNoteFilter,
   Project as ToduProject,
   RecurringFilter as ToduRecurringFilter,
   RecurringTemplate as ToduRecurringTemplate,
@@ -22,6 +23,7 @@ import type {
   HabitStreak,
   HabitSummary,
 } from "../../domain/habit";
+import type { NoteEntityType, NoteFilter, NoteSummary } from "../../domain/note";
 import type {
   RecurringFilter,
   RecurringTemplateDetail,
@@ -132,6 +134,7 @@ export interface ToduDaemonClient {
   checkHabit(habitId: string): Promise<HabitCheckResult>;
   getHabitStreak(habitId: string): Promise<HabitStreak>;
   deleteHabit(habitId: string): Promise<DeleteHabitResult>;
+  listNotes(filter?: NoteFilter): Promise<NoteSummary[]>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
   on(
     eventName: ToduDaemonEventName,
@@ -467,6 +470,17 @@ const createToduDaemonClient = ({
     };
   },
 
+  async listNotes(filter: NoteFilter = {}): Promise<NoteSummary[]> {
+    const result = await connection.request<ToduNote[]>("note.list", {
+      filter: mapNoteFilter(filter),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("note.list", result.error);
+    }
+
+    return result.value.map(mapNoteSummary);
+  },
+
   async listTaskComments(taskId: TaskId): Promise<TaskComment[]> {
     return fetchTaskComments(connection, taskId);
   },
@@ -585,6 +599,26 @@ const mapTaskComment = (note: ToduNote): TaskComment => ({
   content: note.content,
   author: note.author,
   createdAt: note.createdAt,
+});
+
+const mapNoteSummary = (note: ToduNote): NoteSummary => ({
+  id: note.id,
+  content: note.content,
+  author: note.author,
+  entityType: (note.entityType as NoteEntityType) ?? null,
+  entityId: note.entityId ?? null,
+  tags: [...note.tags],
+  createdAt: note.createdAt,
+});
+
+const mapNoteFilter = (filter: NoteFilter): ToduNoteFilter => ({
+  entityType: filter.entityType,
+  entityId: filter.entityId,
+  tag: filter.tag,
+  author: filter.author,
+  createdFrom: filter.from,
+  createdTo: filter.to,
+  journal: filter.journal,
 });
 
 const mapProjectSummary = (project: ToduProject): ToduProjectSummary => ({

@@ -1,4 +1,5 @@
 import type { HabitService } from "../habit-service";
+import type { NoteService } from "../note-service";
 import type { ProjectIntegrationService } from "../project-integration-service";
 import type { ProjectService } from "../project-service";
 import type { RecurringService } from "../recurring-service";
@@ -13,6 +14,7 @@ import {
 import { createToduProjectIntegrationService } from "./todu-project-integration-service";
 import { createToduProjectService } from "./todu-project-service";
 import { createToduHabitService } from "./todu-habit-service";
+import { createToduNoteService } from "./todu-note-service";
 import { createToduRecurringService } from "./todu-recurring-service";
 import { createToduTaskService } from "./todu-task-service";
 
@@ -25,11 +27,13 @@ export interface ToduTaskServiceRuntime {
   projectService: ProjectService;
   recurringService: RecurringService;
   habitService: HabitService;
+  noteService: NoteService;
   projectIntegrationService: ProjectIntegrationService;
   ensureConnected(): Promise<TaskService>;
   ensureProjectServiceConnected(): Promise<ProjectService>;
   ensureRecurringServiceConnected(): Promise<RecurringService>;
   ensureHabitServiceConnected(): Promise<HabitService>;
+  ensureNoteServiceConnected(): Promise<NoteService>;
   ensureProjectIntegrationServiceConnected(): Promise<ProjectIntegrationService>;
   disconnect(): Promise<void>;
 }
@@ -47,6 +51,7 @@ const createToduTaskServiceRuntime = (
   const projectService = createToduProjectService({ client });
   const recurringService = createToduRecurringService({ client });
   const habitService = createToduHabitService({ client });
+  const noteService = createToduNoteService({ client });
   const projectIntegrationService = createToduProjectIntegrationService({
     client,
     projectService,
@@ -64,6 +69,7 @@ const createToduTaskServiceRuntime = (
     projectService,
     recurringService,
     habitService,
+    noteService,
     projectIntegrationService,
     ensureConnected: async () => {
       if (connection.getState().status !== "connected") {
@@ -92,6 +98,13 @@ const createToduTaskServiceRuntime = (
       }
 
       return habitService;
+    },
+    ensureNoteServiceConnected: async () => {
+      if (connection.getState().status !== "connected") {
+        await connectWithinTimeout(connection, initialConnectTimeoutMs);
+      }
+
+      return noteService;
     },
     ensureProjectIntegrationServiceConnected: async () => {
       if (connection.getState().status !== "connected") {
