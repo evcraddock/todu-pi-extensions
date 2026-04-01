@@ -252,6 +252,52 @@ describe("createHabitCheckToolDefinition", () => {
     expect(result.details).toMatchObject({ kind: "habit_check", found: false });
   });
 
+  it("does not fail when check succeeds but streak data is missing", async () => {
+    const checkResult = {
+      habitId: "habit-1",
+      date: "2026-03-31",
+      completed: true,
+      streak: undefined,
+    };
+    const habitService = {
+      checkHabit: vi.fn().mockResolvedValue(checkResult),
+    } as unknown as HabitService;
+
+    const tool = createHabitCheckToolDefinition({
+      getHabitService: vi.fn().mockResolvedValue(habitService),
+      getProjectService: vi.fn(),
+    });
+
+    const result = await tool.execute("tc-1", { habitId: "habit-1" });
+
+    expect(result.content[0]?.text).toContain("checked in");
+    expect(result.content[0]?.text).toContain("Streak: unavailable");
+    expect(result.details).toMatchObject({ kind: "habit_check", found: true });
+  });
+
+  it("does not fail when check succeeds but streak data is partial", async () => {
+    const checkResult = {
+      habitId: "habit-1",
+      date: "2026-03-31",
+      completed: true,
+      streak: { current: 3 },
+    };
+    const habitService = {
+      checkHabit: vi.fn().mockResolvedValue(checkResult),
+    } as unknown as HabitService;
+
+    const tool = createHabitCheckToolDefinition({
+      getHabitService: vi.fn().mockResolvedValue(habitService),
+      getProjectService: vi.fn(),
+    });
+
+    const result = await tool.execute("tc-1", { habitId: "habit-1" });
+
+    expect(result.content[0]?.text).toContain("checked in");
+    expect(result.content[0]?.text).toContain("Streak: 3 current, ? longest, ? total");
+    expect(result.details).toMatchObject({ kind: "habit_check", found: true });
+  });
+
   it("rejects empty habitId", async () => {
     const tool = createHabitCheckToolDefinition({
       getHabitService: vi.fn(),
