@@ -1748,14 +1748,13 @@ const resolveDefaultTaskBrowseFilterState = async (
 };
 
 const resolveDefaultProjectFromRepo = async (
-  taskService: TaskService
+  taskService: TaskService,
+  repoContextService = createRepoContextService()
 ): Promise<ResolveDefaultProjectResult | null> => {
   const projects = await taskService.listProjects();
   if (projects.length === 0) {
     return null;
   }
-
-  const repoContextService = createRepoContextService();
   const repoResult = await repoContextService.resolveRepository();
 
   let candidateName: string | null = null;
