@@ -53,6 +53,7 @@ describe("createToduTaskService", () => {
       moveTask: vi.fn(),
       getHabitStreak: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
+      addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -115,6 +116,7 @@ describe("createToduTaskService", () => {
       moveTask: vi.fn(),
       getHabitStreak: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
+      addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -180,6 +182,7 @@ describe("createToduTaskService", () => {
       moveTask: vi.fn(),
       getHabitStreak: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
+      addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -250,6 +253,7 @@ describe("createToduTaskService", () => {
       moveTask: vi.fn(),
       getHabitStreak: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
+      addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
@@ -331,6 +335,7 @@ describe("createToduTaskService", () => {
       moveTask: vi.fn(),
       getHabitStreak: vi.fn(),
       listTaskComments: vi.fn().mockResolvedValue([]),
+      addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };

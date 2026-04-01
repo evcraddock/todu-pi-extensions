@@ -7,6 +7,7 @@ import type {
   HabitSummary,
   HabitSummaryWithStreak,
 } from "../domain/habit";
+import type { NoteSummary } from "../domain/note";
 
 export interface CreateHabitInput {
   title: string;
@@ -32,6 +33,11 @@ export interface DeleteHabitResult {
   deleted: true;
 }
 
+export interface AddHabitNoteInput {
+  habitId: HabitId;
+  content: string;
+}
+
 export interface HabitService {
   listHabits(filter?: HabitFilter): Promise<HabitSummary[]>;
   listHabitsWithStreaks(filter?: HabitFilter): Promise<HabitSummaryWithStreak[]>;
@@ -41,4 +47,5 @@ export interface HabitService {
   updateHabit(input: UpdateHabitInput): Promise<HabitDetail>;
   checkHabit(habitId: HabitId): Promise<HabitCheckResult>;
   deleteHabit(habitId: HabitId): Promise<DeleteHabitResult>;
+  addHabitNote(input: AddHabitNoteInput): Promise<NoteSummary>;
 }

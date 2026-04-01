@@ -2,8 +2,10 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
 import type { HabitCheckResult, HabitDetail } from "../domain/habit";
+import type { NoteSummary } from "../domain/note";
 import type { ProjectSummary } from "../domain/task";
 import type {
+  AddHabitNoteInput,
   CreateHabitInput,
   DeleteHabitResult,
   HabitService,
@@ -52,6 +54,11 @@ const HabitDeleteParams = Type.Object({
   habitId: Type.String({ description: "Habit ID" }),
 });
 
+const HabitNoteAddParams = Type.Object({
+  habitId: Type.String({ description: "Habit ID" }),
+  content: Type.String({ description: "Note content" }),
+});
+
 interface HabitCreateToolParams {
   title: string;
   projectId: string;
@@ -79,6 +86,11 @@ interface HabitDeleteToolParams {
   habitId: string;
 }
 
+interface HabitNoteAddToolParams {
+  habitId: string;
+  content: string;
+}
+
 interface HabitCreateToolDetails {
   kind: "habit_create";
   input: CreateHabitInput;
@@ -104,6 +116,12 @@ interface HabitDeleteToolDetails {
   found: boolean;
   deleted: boolean;
   result?: DeleteHabitResult;
+}
+
+interface HabitNoteAddToolDetails {
+  kind: "habit_note_add";
+  habitId: string;
+  note: NoteSummary;
 }
 
 interface HabitMutationToolDependencies {
@@ -273,6 +291,38 @@ const createHabitDeleteToolDefinition = ({ getHabitService }: HabitMutationToolD
   },
 });
 
+const createHabitNoteAddToolDefinition = ({ getHabitService }: HabitMutationToolDependencies) => ({
+  name: "habit_note_add",
+  label: "Habit Note Add",
+  description: "Add a note to a habit.",
+  promptSnippet: "Attach a note to a habit by habit ID.",
+  promptGuidelines: [
+    "Use this tool to attach notes to habits in normal chat.",
+    "Provide the habit ID and note content explicitly.",
+  ],
+  parameters: HabitNoteAddParams,
+  async execute(_toolCallId: string, params: HabitNoteAddToolParams) {
+    const input = normalizeHabitNoteAddInput(params);
+
+    try {
+      const habitService = await getHabitService();
+      const note = await habitService.addHabitNote(input);
+      const details: HabitNoteAddToolDetails = {
+        kind: "habit_note_add",
+        habitId: input.habitId,
+        note,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: formatHabitNoteAddContent(note, input.habitId) }],
+        details,
+      };
+    } catch (error) {
+      throw new Error(formatToolError(error, "habit_note_add failed"), { cause: error });
+    }
+  },
+});
+
 const registerHabitMutationTools = (
   pi: Pick<ExtensionAPI, "registerTool">,
   dependencies: HabitMutationToolDependencies
@@ -281,6 +331,7 @@ const registerHabitMutationTools = (
   pi.registerTool(createHabitUpdateToolDefinition(dependencies));
   pi.registerTool(createHabitCheckToolDefinition(dependencies));
   pi.registerTool(createHabitDeleteToolDefinition(dependencies));
+  pi.registerTool(createHabitNoteAddToolDefinition(dependencies));
 };
 
 const normalizeCreateHabitInput = (params: HabitCreateToolParams): CreateHabitInput => ({
@@ -461,6 +512,14 @@ const formatHabitCheckContent = (result: HabitCheckResult): string => {
 const formatHabitDeleteContent = (details: HabitDeleteToolDetails): string =>
   details.found ? `Deleted habit ${details.habitId}.` : `Habit not found: ${details.habitId}`;
 
+const normalizeHabitNoteAddInput = (params: HabitNoteAddToolParams): AddHabitNoteInput => ({
+  habitId: normalizeRequiredText(params.habitId, "habitId"),
+  content: normalizeRequiredText(params.content, "content"),
+});
+
+const formatHabitNoteAddContent = (note: NoteSummary, habitId: string): string =>
+  `Added note ${note.id} to habit ${habitId}.`;
+
 const formatToolError = (error: unknown, prefix: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
     return `${prefix}: ${error.message}`;
@@ -474,14 +533,17 @@ export type {
   HabitCreateToolDetails,
   HabitDeleteToolDetails,
   HabitMutationToolDependencies,
+  HabitNoteAddToolDetails,
   HabitUpdateToolDetails,
 };
 export {
   createHabitCheckToolDefinition,
   createHabitCreateToolDefinition,
   createHabitDeleteToolDefinition,
+  createHabitNoteAddToolDefinition,
   createHabitUpdateToolDefinition,
   normalizeCreateHabitInput,
+  normalizeHabitNoteAddInput,
   normalizeUpdateHabitInput,
   registerHabitMutationTools,
   resolveCreateHabitInput,

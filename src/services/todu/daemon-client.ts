@@ -39,7 +39,12 @@ import type {
   TaskStatus,
   TaskSummary,
 } from "../../domain/task";
-import type { CreateHabitInput, DeleteHabitResult, UpdateHabitInput } from "../habit-service";
+import type {
+  AddHabitNoteInput,
+  CreateHabitInput,
+  DeleteHabitResult,
+  UpdateHabitInput,
+} from "../habit-service";
 import type {
   CreateIntegrationBindingInput,
   IntegrationBinding,
@@ -133,6 +138,7 @@ export interface ToduDaemonClient {
   updateHabit(input: UpdateHabitInput): Promise<HabitDetail>;
   checkHabit(habitId: string): Promise<HabitCheckResult>;
   getHabitStreak(habitId: string): Promise<HabitStreak>;
+  addHabitNote(input: AddHabitNoteInput): Promise<NoteSummary>;
   deleteHabit(habitId: string): Promise<DeleteHabitResult>;
   listNotes(filter?: NoteFilter): Promise<NoteSummary[]>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
@@ -456,6 +462,21 @@ const createToduDaemonClient = ({
       completedToday: result.value.completedToday,
       totalCheckins: result.value.totalCheckins,
     };
+  },
+
+  async addHabitNote(input: AddHabitNoteInput): Promise<NoteSummary> {
+    const noteResult = await connection.request<ToduNote>("note.create", {
+      input: {
+        content: input.content,
+        entityType: "habit",
+        entityId: input.habitId,
+      },
+    });
+    if (!noteResult.ok) {
+      throw mapDaemonErrorToClientError("note.create", noteResult.error);
+    }
+
+    return mapNoteSummary(noteResult.value);
   },
 
   async deleteHabit(habitId: string): Promise<DeleteHabitResult> {
