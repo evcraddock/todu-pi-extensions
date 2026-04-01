@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { BorderedLoader, DynamicBorder } from "@mariozechner/pi-coding-agent";
 import { Container, type SelectItem, SelectList, Text } from "@mariozechner/pi-tui";
@@ -22,6 +24,7 @@ import type { TaskService } from "../services/task-service";
 import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-service";
 import type { TaskBrowseFilterState } from "../services/task-browse-filter-store";
 import { createTaskBrowseFilterState } from "../services/task-browse-filter-store";
+import { createRepoContextService } from "../services/repo-context";
 import {
   createTaskDetailActionItems,
   createTaskDetailViewModel,
@@ -89,9 +92,17 @@ type TaskBrowseViewResult =
 
 type EmptyTaskBrowseAction = "change-filters" | "clear-filters" | "close";
 
+export interface ResolveDefaultProjectResult {
+  projectId: string;
+  projectName: string;
+}
+
 export interface RegisterCommandDependencies {
   getTaskService?: () => Promise<TaskService>;
   getHabitService?: () => Promise<HabitService>;
+  resolveDefaultProject?: (
+    taskService: TaskService
+  ) => Promise<ResolveDefaultProjectResult | null>;
   getCurrentTaskId?: () => TaskId | null;
   clearCurrentTask?: (ctx: ExtensionCommandContext) => Promise<void>;
   promptTaskTitle?: (ctx: ExtensionCommandContext) => Promise<string | null>;
@@ -158,6 +169,8 @@ const createTasksCommandHandler = (
   const getTaskBrowseFilterController = () =>
     dependencies.taskBrowseFilterController ?? getDefaultTaskBrowseFilterContextController();
   const editTaskBrowseFilters = dependencies.editTaskBrowseFilters ?? showTaskBrowseFilterMode;
+  const resolveDefaultProject =
+    dependencies.resolveDefaultProject ?? resolveDefaultProjectFromRepo;
   const loadTasks = dependencies.loadTasks ?? loadTasksWithLoader;
   const showTaskBrowseView = dependencies.showTaskBrowseView ?? selectTaskBrowseViewAction;
   const showEmptyState = dependencies.showEmptyState ?? showEmptyTasksState;
@@ -186,9 +199,17 @@ const createTasksCommandHandler = (
       const taskBrowseFilterController = getTaskBrowseFilterController();
       await taskBrowseFilterController.restoreFromBranch(ctx);
       const taskService = await getTaskService();
-      let mode: "filter" | "view" = taskBrowseFilterController.getState().hasSavedFilter
-        ? "view"
-        : "filter";
+      let mode: "filter" | "view";
+      if (taskBrowseFilterController.getState().hasSavedFilter) {
+        mode = "view";
+      } else {
+        const defaultState = await resolveDefaultTaskBrowseFilterState(
+          taskService,
+          resolveDefaultProject
+        );
+        await taskBrowseFilterController.setState(ctx, defaultState);
+        mode = "view";
+      }
 
       while (true) {
         if (mode === "filter") {
@@ -1710,6 +1731,65 @@ const resolveRequestedTaskId = (args: string, currentTaskId: TaskId | null): Tas
   return trimmedArgs.length > 0 ? trimmedArgs : currentTaskId;
 };
 
+const resolveDefaultTaskBrowseFilterState = async (
+  taskService: TaskService,
+  resolveDefaultProject: (
+    taskService: TaskService
+  ) => Promise<ResolveDefaultProjectResult | null>
+): Promise<TaskBrowseFilterState> => {
+  const project = await resolveDefaultProject(taskService).catch(() => null);
+  return createTaskBrowseFilterState({
+    hasSavedFilter: true,
+    status: "active",
+    priority: "high",
+    projectId: project?.projectId ?? null,
+    projectName: project?.projectName ?? null,
+  });
+};
+
+const resolveDefaultProjectFromRepo = async (
+  taskService: TaskService
+): Promise<ResolveDefaultProjectResult | null> => {
+  const projects = await taskService.listProjects();
+  if (projects.length === 0) {
+    return null;
+  }
+
+  const repoContextService = createRepoContextService();
+  const repoResult = await repoContextService.resolveRepository();
+
+  let candidateName: string | null = null;
+
+  if (repoResult.kind === "resolved") {
+    const targetRef = repoResult.repository.targetRef;
+    const repoName = targetRef.includes("/") ? targetRef.split("/").pop()! : targetRef;
+    candidateName = repoName;
+  }
+
+  if (!candidateName) {
+    candidateName = path.basename(process.cwd());
+  }
+
+  if (!candidateName) {
+    return null;
+  }
+
+  const match = matchProjectByName(projects, candidateName);
+  return match ? { projectId: match.id, projectName: match.name } : null;
+};
+
+const matchProjectByName = (
+  projects: ProjectSummary[],
+  candidateName: string
+): ProjectSummary | null => {
+  const normalized = candidateName.toLowerCase();
+  return (
+    projects.find((project) => project.name.toLowerCase() === normalized) ??
+    projects.find((project) => project.name.toLowerCase().replace(/[\s_-]+/g, "-") === normalized.replace(/[\s_-]+/g, "-")) ??
+    null
+  );
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -1734,9 +1814,12 @@ export {
   formatTaskBrowseFilterSummary,
   formatTasksCommandError,
   loadTasksWithLoader,
+  matchProjectByName,
   openSelectedTaskDetail,
   openTaskDetailHub,
   registerCommands,
+  resolveDefaultProjectFromRepo,
+  resolveDefaultTaskBrowseFilterState,
   resolveRequestedTaskId,
   selectTaskBrowseViewAction,
   selectTaskDetailAction,
