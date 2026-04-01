@@ -60,6 +60,8 @@ const createToduHabitService = ({ client }: ToduHabitServiceDependencies): Habit
   checkHabit: (habitId) => runHabitServiceOperation("checkHabit", () => client.checkHabit(habitId)),
   deleteHabit: (habitId) =>
     runHabitServiceOperation("deleteHabit", () => client.deleteHabit(habitId)),
+  addHabitNote: (input) =>
+    runHabitServiceOperation("addHabitNote", () => client.addHabitNote(input)),
 });
 
 const listHabitsWithProjectNames = async (

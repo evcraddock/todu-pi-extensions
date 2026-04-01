@@ -290,4 +290,40 @@ describe("createToduDaemonClient habit support", () => {
       })
     ).rejects.toThrow("habit.create failed");
   });
+
+  it("creates a habit note via note.create with entityType habit", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "note-1",
+        content: "Session done",
+        author: "user",
+        entityType: "habit",
+        entityId: "habit-1",
+        tags: [],
+        createdAt: "2026-03-31T00:00:00.000Z",
+      },
+    });
+
+    const client = createClient(connection);
+    const note = await client.addHabitNote({ habitId: "habit-1", content: "Session done" });
+
+    expect(note).toEqual({
+      id: "note-1",
+      content: "Session done",
+      author: "user",
+      entityType: "habit",
+      entityId: "habit-1",
+      tags: [],
+      createdAt: "2026-03-31T00:00:00.000Z",
+    });
+    expect(connection.request).toHaveBeenCalledWith("note.create", {
+      input: {
+        content: "Session done",
+        entityType: "habit",
+        entityId: "habit-1",
+      },
+    });
+  });
 });

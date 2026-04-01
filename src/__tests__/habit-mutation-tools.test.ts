@@ -8,6 +8,7 @@ import {
   createHabitCheckToolDefinition,
   createHabitCreateToolDefinition,
   createHabitDeleteToolDefinition,
+  createHabitNoteAddToolDefinition,
   createHabitUpdateToolDefinition,
   normalizeCreateHabitInput,
   normalizeUpdateHabitInput,
@@ -298,5 +299,55 @@ describe("createHabitDeleteToolDefinition", () => {
 
     expect(result.content[0]?.text).toContain("Habit not found");
     expect(result.details).toMatchObject({ kind: "habit_delete", found: false, deleted: false });
+  });
+});
+
+describe("createHabitNoteAddToolDefinition", () => {
+  it("adds a note to a habit and returns structured details", async () => {
+    const note = {
+      id: "note-1",
+      content: "Session complete",
+      author: "user",
+      entityType: "habit" as const,
+      entityId: "habit-1",
+      tags: [],
+      createdAt: "2026-03-31T00:00:00.000Z",
+    };
+    const habitService = {
+      addHabitNote: vi.fn().mockResolvedValue(note),
+    } as unknown as HabitService;
+    const tool = createHabitNoteAddToolDefinition({
+      getHabitService: vi.fn().mockResolvedValue(habitService),
+      getProjectService: vi.fn().mockResolvedValue(createProjectService()),
+    });
+
+    const result = await tool.execute("tool-call-1", {
+      habitId: "habit-1",
+      content: "Session complete",
+    });
+
+    expect(habitService.addHabitNote).toHaveBeenCalledWith({
+      habitId: "habit-1",
+      content: "Session complete",
+    });
+    expect(result.content[0]?.text).toContain("Added note note-1 to habit habit-1");
+    expect(result.details).toEqual({
+      kind: "habit_note_add",
+      habitId: "habit-1",
+      note,
+    });
+  });
+
+  it("surfaces service failures with tool-specific context", async () => {
+    const tool = createHabitNoteAddToolDefinition({
+      getHabitService: vi.fn().mockResolvedValue({
+        addHabitNote: vi.fn().mockRejectedValue(new Error("daemon unavailable")),
+      } as unknown as HabitService),
+      getProjectService: vi.fn().mockResolvedValue(createProjectService()),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", { habitId: "habit-1", content: "note" })
+    ).rejects.toThrow("habit_note_add failed: daemon unavailable");
   });
 });
