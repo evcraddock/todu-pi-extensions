@@ -70,6 +70,8 @@ describe("normalizeTaskListFilter", () => {
       query: undefined,
       from: undefined,
       to: undefined,
+      completedFrom: undefined,
+      completedTo: undefined,
       label: undefined,
       overdue: undefined,
       today: undefined,
@@ -84,6 +86,8 @@ describe("normalizeTaskListFilter", () => {
       normalizeTaskListFilter({
         from: "2026-01-01",
         to: "2026-03-31",
+        completedFrom: "2026-03-01",
+        completedTo: "2026-03-31",
         label: "tools",
         overdue: true,
         today: false,
@@ -98,6 +102,8 @@ describe("normalizeTaskListFilter", () => {
       query: undefined,
       from: "2026-01-01",
       to: "2026-03-31",
+      completedFrom: "2026-03-01",
+      completedTo: "2026-03-31",
       label: "tools",
       overdue: true,
       today: false,
@@ -132,6 +138,8 @@ describe("createTaskListToolDefinition", () => {
       query: "task tools",
       from: undefined,
       to: undefined,
+      completedFrom: undefined,
+      completedTo: undefined,
       label: undefined,
       overdue: undefined,
       today: undefined,
@@ -151,6 +159,8 @@ describe("createTaskListToolDefinition", () => {
         query: "task tools",
         from: undefined,
         to: undefined,
+        completedFrom: undefined,
+        completedTo: undefined,
         label: undefined,
         overdue: undefined,
         today: undefined,
@@ -184,6 +194,8 @@ describe("createTaskListToolDefinition", () => {
         query: undefined,
         from: undefined,
         to: undefined,
+        completedFrom: undefined,
+        completedTo: undefined,
         label: undefined,
         overdue: undefined,
         today: undefined,
@@ -195,6 +207,27 @@ describe("createTaskListToolDefinition", () => {
       total: 0,
       empty: true,
     });
+  });
+
+  it("passes explicit completion-date filters through to the service", async () => {
+    const taskService = {
+      listTasks: vi.fn().mockResolvedValue([]),
+    } as unknown as TaskService;
+    const tool = createTaskListToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    await tool.execute("tool-call-1", {
+      completedFrom: "2026-03-01",
+      completedTo: "2026-03-31",
+    });
+
+    expect(taskService.listTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completedFrom: "2026-03-01",
+        completedTo: "2026-03-31",
+      })
+    );
   });
 
   it("surfaces service failures with tool-specific context", async () => {
