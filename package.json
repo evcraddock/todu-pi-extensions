@@ -50,7 +50,7 @@
     "@mariozechner/pi-ai": "^0.60.0",
     "@mariozechner/pi-tui": "^0.60.0",
     "@sinclair/typebox": "^0.34.48",
-    "@todu/core": "^0.14.2",
+    "@todu/core": "^0.15.0",
     "yaml": "^2.8.2"
   }
 }

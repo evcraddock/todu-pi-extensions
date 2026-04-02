@@ -834,6 +834,8 @@ const mapTaskFilter = (filter: TaskFilter): Record<string, unknown> => {
     today: filter.today,
     createdFrom: filter.from,
     createdTo: filter.to,
+    completedFrom: filter.completedFrom,
+    completedTo: filter.completedTo,
     timezone: filter.timezone,
   };
 };
