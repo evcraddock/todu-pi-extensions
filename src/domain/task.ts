@@ -48,8 +48,8 @@ export interface TaskFilter {
   query?: string;
   from?: string;
   to?: string;
-  completedFrom?: string;
-  completedTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
   label?: string;
   overdue?: boolean;
   today?: boolean;

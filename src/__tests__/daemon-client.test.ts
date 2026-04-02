@@ -57,8 +57,8 @@ describe("createToduDaemonClient", () => {
         today: undefined,
         createdFrom: undefined,
         createdTo: undefined,
-        completedFrom: undefined,
-        completedTo: undefined,
+        updatedFrom: undefined,
+        updatedTo: undefined,
         timezone: undefined,
       },
     });
@@ -86,7 +86,7 @@ describe("createToduDaemonClient", () => {
     });
   });
 
-  it("passes creation date, completion date, and timezone filters to the daemon", async () => {
+  it("passes creation date, updated date, and timezone filters to the daemon", async () => {
     const connection = createConnectionMock();
     connection.request.mockResolvedValue({ ok: true, value: [] });
 
@@ -100,8 +100,8 @@ describe("createToduDaemonClient", () => {
     await client.listTasks({
       from: "2026-01-01",
       to: "2026-12-31",
-      completedFrom: "2026-03-01",
-      completedTo: "2026-03-31",
+      updatedFrom: "2026-03-01",
+      updatedTo: "2026-03-31",
       timezone: "America/Chicago",
     });
 
@@ -109,8 +109,8 @@ describe("createToduDaemonClient", () => {
       filter: expect.objectContaining({
         createdFrom: "2026-01-01",
         createdTo: "2026-12-31",
-        completedFrom: "2026-03-01",
-        completedTo: "2026-03-31",
+        updatedFrom: "2026-03-01",
+        updatedTo: "2026-03-31",
         timezone: "America/Chicago",
       }),
     });

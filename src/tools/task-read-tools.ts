@@ -39,11 +39,11 @@ const TaskListParams = Type.Object({
   query: Type.Optional(Type.String({ description: "Optional title search query" })),
   from: Type.Optional(Type.String({ description: "Optional created-at start date (YYYY-MM-DD)" })),
   to: Type.Optional(Type.String({ description: "Optional created-at end date (YYYY-MM-DD)" })),
-  completedFrom: Type.Optional(
-    Type.String({ description: "Optional completed-at start date (YYYY-MM-DD)" })
+  updatedFrom: Type.Optional(
+    Type.String({ description: "Optional updated-at start date (YYYY-MM-DD)" })
   ),
-  completedTo: Type.Optional(
-    Type.String({ description: "Optional completed-at end date (YYYY-MM-DD)" })
+  updatedTo: Type.Optional(
+    Type.String({ description: "Optional updated-at end date (YYYY-MM-DD)" })
   ),
   label: Type.Optional(Type.String({ description: "Optional label filter" })),
   overdue: Type.Optional(Type.Boolean({ description: "Show overdue tasks only" })),
@@ -72,8 +72,8 @@ interface TaskListToolParams {
   query?: string;
   from?: string;
   to?: string;
-  completedFrom?: string;
-  completedTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
   label?: string;
   overdue?: boolean;
   today?: boolean;
@@ -109,9 +109,9 @@ const createTaskListToolDefinition = ({ getTaskService }: TaskReadToolDependenci
   name: "task_list",
   label: "Task List",
   description:
-    "List tasks with optional status, priority, project, title, label, creation-date, completion-date, overdue, today, and sort filters.",
+    "List tasks with optional status, priority, project, title, label, creation-date, updated-date, overdue, today, and sort filters.",
   promptSnippet:
-    "List tasks using structured filters for status, priority, project, query, creation date, or completion date.",
+    "List tasks using structured filters for status, priority, project, query, creation date, or updated date.",
   promptGuidelines: [
     "Use this tool for backend task lookups in normal chat instead of slash-command task browsing.",
   ],
@@ -199,8 +199,8 @@ const normalizeTaskListFilter = (params: TaskListToolParams): TaskFilter => ({
   query: normalizeOptionalText(params.query),
   from: normalizeOptionalText(params.from),
   to: normalizeOptionalText(params.to),
-  completedFrom: normalizeOptionalText(params.completedFrom),
-  completedTo: normalizeOptionalText(params.completedTo),
+  updatedFrom: normalizeOptionalText(params.updatedFrom),
+  updatedTo: normalizeOptionalText(params.updatedTo),
   label: normalizeOptionalText(params.label),
   overdue: params.overdue ?? undefined,
   today: params.today ?? undefined,
