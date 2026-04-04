@@ -8,7 +8,6 @@ const ProjectListParams = Type.Object({});
 const ProjectShowParams = Type.Object({
   projectRef: Type.String({ description: "Project ID or unique project name" }),
 });
-const MAX_PROJECT_LIST_PREVIEW_COUNT = 25;
 
 interface ProjectListToolDetails {
   kind: "project_list";
@@ -145,16 +144,10 @@ const formatProjectListContent = (details: ProjectListToolDetails): string => {
     return "No projects found.";
   }
 
-  const previewProjects = details.projects.slice(0, MAX_PROJECT_LIST_PREVIEW_COUNT);
   const lines = [`Projects (${details.total}):`];
 
-  for (const project of previewProjects) {
+  for (const project of details.projects) {
     lines.push(`- ${formatProjectSummaryLine(project)}`);
-  }
-
-  const remainingCount = details.total - previewProjects.length;
-  if (remainingCount > 0) {
-    lines.push(`- ... ${remainingCount} more project(s)`);
   }
 
   return lines.join("\n");
