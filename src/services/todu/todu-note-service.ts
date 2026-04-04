@@ -27,6 +27,7 @@ export interface ToduNoteServiceDependencies {
 
 const createToduNoteService = ({ client }: ToduNoteServiceDependencies): NoteService => ({
   listNotes: (filter) => runNoteServiceOperation("listNotes", () => client.listNotes(filter)),
+  getNote: (noteId) => runNoteServiceOperation("getNote", () => client.getNote(noteId)),
 });
 
 const runNoteServiceOperation = async <TResult>(

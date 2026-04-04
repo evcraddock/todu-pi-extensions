@@ -10,6 +10,10 @@ const NOTE_ENTITY_TYPE_VALUES = ["task", "project", "habit"] as const;
 
 const MAX_NOTE_CONTENT_PREVIEW_LENGTH = 200;
 
+const NoteShowParams = Type.Object({
+  noteId: Type.String({ description: "Note ID" }),
+});
+
 const NoteListParams = Type.Object({
   entityType: Type.Optional(
     StringEnum(NOTE_ENTITY_TYPE_VALUES, {
@@ -46,6 +50,17 @@ interface NoteListToolDetails {
   notes: NoteSummary[];
   total: number;
   empty: boolean;
+}
+
+interface NoteShowToolParams {
+  noteId: string;
+}
+
+interface NoteShowToolDetails {
+  kind: "note_show";
+  noteId: string;
+  found: boolean;
+  note?: NoteSummary;
 }
 
 interface NoteReadToolDependencies {
@@ -89,11 +104,56 @@ const createNoteListToolDefinition = ({ getNoteService }: NoteReadToolDependenci
   },
 });
 
+const createNoteShowToolDefinition = ({ getNoteService }: NoteReadToolDependencies) => ({
+  name: "note_show",
+  label: "Note Show",
+  description: "Show full note details by note ID.",
+  promptSnippet: "Show details for a specific note by note ID.",
+  promptGuidelines: [
+    "Use this tool when the user asks for details about a known note ID.",
+    "If the note is missing, report the explicit not-found result instead of guessing.",
+  ],
+  parameters: NoteShowParams,
+  async execute(_toolCallId: string, params: NoteShowToolParams) {
+    try {
+      const noteService = await getNoteService();
+      const note = await noteService.getNote(params.noteId);
+      if (!note) {
+        const details: NoteShowToolDetails = {
+          kind: "note_show",
+          noteId: params.noteId,
+          found: false,
+        };
+
+        return {
+          content: [{ type: "text" as const, text: `Note not found: ${params.noteId}` }],
+          details,
+        };
+      }
+
+      const details: NoteShowToolDetails = {
+        kind: "note_show",
+        noteId: params.noteId,
+        found: true,
+        note,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: formatNoteShowContent(note) }],
+        details,
+      };
+    } catch (error) {
+      throw new Error(formatToolError(error, "note_show failed"), { cause: error });
+    }
+  },
+});
+
 const registerNoteReadTools = (
   pi: Pick<ExtensionAPI, "registerTool">,
   dependencies: NoteReadToolDependencies
 ): void => {
   pi.registerTool(createNoteListToolDefinition(dependencies));
+  pi.registerTool(createNoteShowToolDefinition(dependencies));
 };
 
 const normalizeNoteListFilter = (params: NoteListToolParams): NoteFilter => ({
@@ -142,6 +202,23 @@ const truncateContent = (content: string, maxLength: number): string => {
   return singleLine.slice(0, maxLength - 3) + "...";
 };
 
+const formatNoteShowContent = (note: NoteSummary): string => {
+  const entityLabel = note.entityType ? `${note.entityType}:${note.entityId ?? "?"}` : "journal";
+  const tagLabel = note.tags.length > 0 ? note.tags.join(", ") : "no tags";
+
+  return [
+    `Note ${note.id}`,
+    "",
+    `Author: ${note.author}`,
+    `Entity: ${entityLabel}`,
+    `Tags: ${tagLabel}`,
+    `Created: ${note.createdAt}`,
+    "",
+    "Content:",
+    note.content.trim().length > 0 ? note.content : "(empty)",
+  ].join("\n");
+};
+
 const formatToolError = (error: unknown, prefix: string): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
     return `${prefix}: ${error.message}`;
@@ -150,10 +227,12 @@ const formatToolError = (error: unknown, prefix: string): string => {
   return prefix;
 };
 
-export type { NoteListToolDetails, NoteReadToolDependencies };
+export type { NoteListToolDetails, NoteShowToolDetails, NoteReadToolDependencies };
 export {
   createNoteListToolDefinition,
+  createNoteShowToolDefinition,
   formatNoteListContent,
+  formatNoteShowContent,
   normalizeNoteListFilter,
   registerNoteReadTools,
 };
