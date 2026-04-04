@@ -7,7 +7,7 @@ import type { NoteService } from "../services/note-service";
 import { getSystemTimezone } from "../utils/timezone";
 
 const NOTE_ENTITY_TYPE_VALUES = ["task", "project", "habit"] as const;
-const MAX_NOTE_LIST_PREVIEW_COUNT = 25;
+
 const MAX_NOTE_CONTENT_PREVIEW_LENGTH = 200;
 
 const NoteListParams = Type.Object({
@@ -117,16 +117,10 @@ const formatNoteListContent = (details: NoteListToolDetails): string => {
     return "No notes found.";
   }
 
-  const previewNotes = details.notes.slice(0, MAX_NOTE_LIST_PREVIEW_COUNT);
   const lines = [`Notes (${details.total}):`];
 
-  for (const note of previewNotes) {
+  for (const note of details.notes) {
     lines.push(`- ${formatNoteSummaryLine(note)}`);
-  }
-
-  const remainingCount = details.total - previewNotes.length;
-  if (remainingCount > 0) {
-    lines.push(`- ... ${remainingCount} more note(s)`);
   }
 
   return lines.join("\n");

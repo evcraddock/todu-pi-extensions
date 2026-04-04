@@ -8,7 +8,6 @@ const HabitListParams = Type.Object({});
 const HabitShowParams = Type.Object({
   habitId: Type.String({ description: "Habit ID" }),
 });
-const MAX_HABIT_LIST_PREVIEW_COUNT = 25;
 
 interface HabitListToolDetails {
   kind: "habit_list";
@@ -134,16 +133,10 @@ const formatHabitListContent = (details: HabitListToolDetails): string => {
     return "No habits found.";
   }
 
-  const previewHabits = details.habits.slice(0, MAX_HABIT_LIST_PREVIEW_COUNT);
   const lines = [`Habits (${details.total}):`];
 
-  for (const habit of previewHabits) {
+  for (const habit of details.habits) {
     lines.push(`- ${formatHabitSummaryLine(habit)}`);
-  }
-
-  const remainingCount = details.total - previewHabits.length;
-  if (remainingCount > 0) {
-    lines.push(`- ... ${remainingCount} more habit(s)`);
   }
 
   return lines.join("\n");

@@ -5,7 +5,6 @@ import type { RecurringTemplateSummary } from "../domain/recurring";
 import type { RecurringService } from "../services/recurring-service";
 
 const RecurringListParams = Type.Object({});
-const MAX_RECURRING_LIST_PREVIEW_COUNT = 25;
 
 interface RecurringListToolDetails {
   kind: "recurring_list";
@@ -63,16 +62,10 @@ const formatRecurringListContent = (details: RecurringListToolDetails): string =
     return "No recurring templates found.";
   }
 
-  const previewTemplates = details.templates.slice(0, MAX_RECURRING_LIST_PREVIEW_COUNT);
   const lines = [`Recurring templates (${details.total}):`];
 
-  for (const template of previewTemplates) {
+  for (const template of details.templates) {
     lines.push(`- ${formatRecurringSummaryLine(template)}`);
-  }
-
-  const remainingCount = details.total - previewTemplates.length;
-  if (remainingCount > 0) {
-    lines.push(`- ... ${remainingCount} more recurring template(s)`);
   }
 
   return lines.join("\n");

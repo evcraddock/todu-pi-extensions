@@ -21,8 +21,6 @@ const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelle
 const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
 const TASK_SORT_FIELD_VALUES = ["priority", "dueDate", "createdAt", "updatedAt", "title"] as const;
 const TASK_SORT_DIRECTION_VALUES = ["asc", "desc"] as const;
-const MAX_TASK_LIST_PREVIEW_COUNT = 25;
-const MAX_COMMENT_PREVIEW_COUNT = 5;
 
 const TaskListParams = Type.Object({
   statuses: Type.Optional(
@@ -223,16 +221,10 @@ const formatTaskListContent = (details: TaskListToolDetails): string => {
     return "No tasks found.";
   }
 
-  const previewTasks = details.tasks.slice(0, MAX_TASK_LIST_PREVIEW_COUNT);
   const lines = [`Tasks (${details.total}):`];
 
-  for (const task of previewTasks) {
+  for (const task of details.tasks) {
     lines.push(`- ${formatTaskSummaryLine(task)}`);
-  }
-
-  const remainingCount = details.total - previewTasks.length;
-  if (remainingCount > 0) {
-    lines.push(`- ... ${remainingCount} more task(s)`);
   }
 
   return lines.join("\n");
@@ -263,17 +255,13 @@ const formatTaskShowContent = (task: TaskDetail): string => {
     return lines.join("\n");
   }
 
-  const previewComments = task.comments.slice(0, MAX_COMMENT_PREVIEW_COUNT);
-  for (const comment of previewComments) {
+  for (const comment of task.comments) {
     lines.push(`- [${comment.createdAt}] ${comment.author}`);
     lines.push(...indentLines(comment.content || "(empty)", 2));
     lines.push("");
   }
 
-  const remainingCount = task.comments.length - previewComments.length;
-  if (remainingCount > 0) {
-    lines.push(`- ... ${remainingCount} older comment(s) omitted`);
-  } else if (lines.at(-1) === "") {
+  if (lines.at(-1) === "") {
     lines.pop();
   }
 
