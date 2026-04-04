@@ -9,7 +9,9 @@ import { registerTools } from "@/extension/register-tools";
 import type { NoteService } from "@/services/note-service";
 import {
   createNoteListToolDefinition,
+  createNoteShowToolDefinition,
   formatNoteListContent,
+  formatNoteShowContent,
   normalizeNoteListFilter,
 } from "@/tools/note-read-tools";
 
@@ -34,6 +36,7 @@ describe("registerTools", () => {
 
     const registeredToolNames = pi.registerTool.mock.calls.map(([tool]) => tool.name);
     expect(registeredToolNames).toContain("note_list");
+    expect(registeredToolNames).toContain("note_show");
   });
 });
 
@@ -184,5 +187,82 @@ describe("formatNoteListContent", () => {
     });
 
     expect(content).toContain("journal");
+  });
+});
+
+describe("createNoteShowToolDefinition", () => {
+  it("returns full note details when note is found", async () => {
+    const note = createNoteSummary();
+    const noteService = {
+      listNotes: vi.fn(),
+      getNote: vi.fn().mockResolvedValue(note),
+    } as unknown as NoteService;
+    const tool = createNoteShowToolDefinition({
+      getNoteService: vi.fn().mockResolvedValue(noteService),
+    });
+
+    const result = await tool.execute("tool-call-1", { noteId: "note-1" });
+
+    expect(noteService.getNote).toHaveBeenCalledWith("note-1");
+    expect(result.content[0]?.text).toContain("Note note-1");
+    expect(result.content[0]?.text).toContain("user");
+    expect(result.content[0]?.text).toContain("review");
+    expect(result.content[0]?.text).toContain("task:task-123");
+    expect(result.content[0]?.text).toContain("This is a test note.");
+    expect(result.details).toEqual({
+      kind: "note_show",
+      noteId: "note-1",
+      found: true,
+      note,
+    });
+  });
+
+  it("returns not-found result when note does not exist", async () => {
+    const noteService = {
+      listNotes: vi.fn(),
+      getNote: vi.fn().mockResolvedValue(null),
+    } as unknown as NoteService;
+    const tool = createNoteShowToolDefinition({
+      getNoteService: vi.fn().mockResolvedValue(noteService),
+    });
+
+    const result = await tool.execute("tool-call-1", { noteId: "note-missing" });
+
+    expect(result.content[0]?.text).toBe("Note not found: note-missing");
+    expect(result.details).toEqual({
+      kind: "note_show",
+      noteId: "note-missing",
+      found: false,
+    });
+  });
+
+  it("surfaces service failures with tool-specific context", async () => {
+    const tool = createNoteShowToolDefinition({
+      getNoteService: vi.fn().mockResolvedValue({
+        getNote: vi.fn().mockRejectedValue(new Error("daemon unavailable")),
+      } as unknown as NoteService),
+    });
+
+    await expect(tool.execute("tool-call-1", { noteId: "note-1" })).rejects.toThrow(
+      "note_show failed: daemon unavailable"
+    );
+  });
+});
+
+describe("formatNoteShowContent", () => {
+  it("formats full note details", () => {
+    const content = formatNoteShowContent(createNoteSummary());
+
+    expect(content).toContain("Note note-1");
+    expect(content).toContain("Author: user");
+    expect(content).toContain("Entity: task:task-123");
+    expect(content).toContain("Tags: review");
+    expect(content).toContain("This is a test note.");
+  });
+
+  it("formats journal entries without entity binding", () => {
+    const content = formatNoteShowContent(createNoteSummary({ entityType: null, entityId: null }));
+
+    expect(content).toContain("Entity: journal");
   });
 });

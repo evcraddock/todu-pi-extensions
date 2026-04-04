@@ -140,6 +140,7 @@ export interface ToduDaemonClient {
   getHabitStreak(habitId: string): Promise<HabitStreak>;
   addHabitNote(input: AddHabitNoteInput): Promise<NoteSummary>;
   deleteHabit(habitId: string): Promise<DeleteHabitResult>;
+  getNote(noteId: string): Promise<NoteSummary | null>;
   listNotes(filter?: NoteFilter): Promise<NoteSummary[]>;
   listTaskComments(taskId: TaskId): Promise<TaskComment[]>;
   on(
@@ -489,6 +490,19 @@ const createToduDaemonClient = ({
       habitId,
       deleted: true,
     };
+  },
+
+  async getNote(noteId: string): Promise<NoteSummary | null> {
+    const result = await connection.request<ToduNote>("note.get", { id: noteId });
+    if (!result.ok) {
+      if (result.error.code === "NOT_FOUND") {
+        return null;
+      }
+
+      throw mapDaemonErrorToClientError("note.get", result.error);
+    }
+
+    return mapNoteSummary(result.value);
   },
 
   async listNotes(filter: NoteFilter = {}): Promise<NoteSummary[]> {
