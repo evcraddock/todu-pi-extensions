@@ -8,8 +8,6 @@ import { getSystemTimezone } from "../utils/timezone";
 
 const NOTE_ENTITY_TYPE_VALUES = ["task", "project", "habit"] as const;
 
-const MAX_NOTE_CONTENT_PREVIEW_LENGTH = 200;
-
 const NoteShowParams = Type.Object({
   noteId: Type.String({ description: "Note ID" }),
 });
@@ -189,17 +187,7 @@ const formatNoteListContent = (details: NoteListToolDetails): string => {
 const formatNoteSummaryLine = (note: NoteSummary): string => {
   const entityLabel = note.entityType ? `${note.entityType}:${note.entityId ?? "?"}` : "journal";
   const tagLabel = note.tags.length > 0 ? note.tags.join(", ") : "no tags";
-  const preview = truncateContent(note.content, MAX_NOTE_CONTENT_PREVIEW_LENGTH);
-  return `${note.id} • ${entityLabel} • ${note.author} • ${tagLabel} • ${note.createdAt}\n    ${preview}`;
-};
-
-const truncateContent = (content: string, maxLength: number): string => {
-  const singleLine = content.replace(/\r?\n/g, " ").trim();
-  if (singleLine.length <= maxLength) {
-    return singleLine;
-  }
-
-  return singleLine.slice(0, maxLength - 3) + "...";
+  return `${note.id} • ${entityLabel} • ${note.author} • ${tagLabel} • ${note.createdAt}\n    ${note.content}`;
 };
 
 const formatNoteShowContent = (note: NoteSummary): string => {
