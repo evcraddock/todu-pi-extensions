@@ -1,9 +1,19 @@
 {
-  "name": "todu-pi-extensions",
+  "name": "@todu/pi-extensions",
   "version": "0.1.0",
-  "private": true,
   "description": "Task manager extensions for the pi agent harness that create UI for handling tasks.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "keywords": [
     "pi-package",
     "pi",
@@ -13,15 +23,25 @@
     "tui"
   ],
   "engines": {
-    "node": ">=20.6.0"
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/evcraddock/todu-pi-extensions.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "pi": {
     "extensions": [
-      "./src/index.ts"
+      "./dist/index.js"
     ]
   },
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc --project tsconfig.build.json && node ./scripts/fix-dist-imports.mjs",
+    "prepack": "npm run build",
+    "package:smoke": "node -e \"import('./dist/index.js')\"",
+    "package:check": "npm pack --dry-run",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
@@ -33,11 +53,17 @@
     "pre-pr": "./scripts/pre-pr.sh"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*"
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@sinclair/typebox": "*"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@mariozechner/pi-ai": "^0.64.0",
     "@mariozechner/pi-coding-agent": "^0.64.0",
+    "@mariozechner/pi-tui": "^0.64.0",
+    "@sinclair/typebox": "^0.34.48",
     "@types/node": "^25.3.5",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.3",
@@ -47,9 +73,6 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.64.0",
-    "@mariozechner/pi-tui": "^0.64.0",
-    "@sinclair/typebox": "^0.34.48",
     "@todu/core": "^0.15.0",
     "yaml": "^2.8.2"
   }
