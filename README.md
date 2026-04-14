@@ -25,23 +25,33 @@ Install these first:
 
 ## Install the extension
 
-Install from git:
+Install the packaged npm release:
 
 ```bash
-pi install git:github.com/evcraddock/todu-pi-extensions
+pi install npm:@todu/pi-extensions
 ```
 
 Install project-local instead of globally:
 
 ```bash
-pi install -l git:github.com/evcraddock/todu-pi-extensions
+pi install -l npm:@todu/pi-extensions
+```
+
+Install from git when testing an unpublished revision:
+
+```bash
+pi install git:github.com/evcraddock/todu-pi-extensions
 ```
 
 Install from a local checkout while developing:
 
 ```bash
+npm install
+npm run build
 pi install /path/to/todu-pi-extensions
 ```
+
+Local path installs load `dist/index.js`, not `src/index.ts`. Rebuild after source changes so pi picks up the packaged output instead of live source files.
 
 After installation, reload pi if it is already running.
 
@@ -73,6 +83,10 @@ make pre-pr
 make dev-cli CMD="task list"
 make help
 ```
+
+## Release
+
+Tag a version that matches `package.json` and let GitHub Actions publish `@todu/pi-extensions` to npm and attach the package tarball to the GitHub release. The workflow expects `NPM_TOKEN` to be configured in the repository secrets.
 
 The isolated dev daemon keeps its state under `.dev/` so local development does not touch your normal todu data.
 

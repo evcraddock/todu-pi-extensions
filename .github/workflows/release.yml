@@ -1,0 +1,196 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      package_name: ${{ steps.meta.outputs.package_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Extract release metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'; then
+            echo "::error::Invalid tag format: $TAG"
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+
+          if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+            echo "::error::Version mismatch: package.json has $PACKAGE_VERSION, expected $VERSION"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+
+          if echo "$VERSION" | grep -qE '(alpha|beta|rc|dev)'; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build and verify
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build package
+        run: npm run build
+
+      - name: Smoke test packaged entrypoint
+        run: npm run package:smoke
+
+      - name: Verify npm package contents
+        run: npm run package:check
+
+      - name: Create package tarball
+        run: |
+          TARBALL=$(npm pack)
+          echo "Created $TARBALL"
+
+      - name: Upload package tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: "*.tgz"
+
+  publish-npm:
+    name: Publish to npm
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Publish npm package
+        run: |
+          if output=$(npm publish --access public 2>&1); then
+            echo "✅ Published ${{ needs.validate.outputs.package_name }}"
+          elif echo "$output" | grep -q "previously published"; then
+            echo "⏭️  ${{ needs.validate.outputs.package_name }} already published at this version, skipping"
+          else
+            echo "$output" >&2
+            echo "::error::Failed to publish ${{ needs.validate.outputs.package_name }}"
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify publish
+        run: |
+          PACKAGE_NAME="${{ needs.validate.outputs.package_name }}"
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          for attempt in 1 2 3 4 5; do
+            if npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null; then
+              echo "✅ ${PACKAGE_NAME}@${VERSION} is available on npm"
+              exit 0
+            fi
+
+            echo "Waiting for ${PACKAGE_NAME}@${VERSION} to propagate (attempt ${attempt}/5)..."
+            sleep 15
+          done
+
+          echo "::error::${PACKAGE_NAME}@${VERSION} not found on npm after 5 attempts"
+          exit 1
+
+  release:
+    name: Create GitHub Release
+    needs: [validate, build, publish-npm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download package tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: dist/release
+
+      - name: Write release notes
+        run: |
+          cat > release-notes.md <<EOF
+          Release ${{ needs.validate.outputs.tag }}
+
+          npm package:
+          - `${{ needs.validate.outputs.package_name }}`
+          - version `${{ needs.validate.outputs.version }}`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: ${{ needs.validate.outputs.tag }}
+          body_path: release-notes.md
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          files: dist/release/*
