@@ -26,6 +26,7 @@ const createNoteSummary = (overrides: Partial<NoteSummary> = {}): NoteSummary =>
   tags: ["review"],
   createdAt: "2026-03-20T00:00:00.000Z",
   ...overrides,
+  contentApproval: overrides.contentApproval ?? null,
 });
 
 describe("registerTools", () => {
@@ -218,6 +219,7 @@ describe("createNoteShowToolDefinition", () => {
     expect(result.content[0]?.text).toContain("review");
     expect(result.content[0]?.text).toContain("task:task-123");
     expect(result.content[0]?.text).toContain("This is a test note.");
+    expect(result.content[0]?.text).toContain("Approval: none");
     expect(result.details).toEqual({
       kind: "note_show",
       noteId: "note-1",
@@ -266,7 +268,18 @@ describe("formatNoteShowContent", () => {
     expect(content).toContain("Author: Erik");
     expect(content).toContain("Entity: task:task-123");
     expect(content).toContain("Tags: review");
+    expect(content).toContain("Approval: none");
     expect(content).toContain("This is a test note.");
+  });
+
+  it("shows pending approval metadata when present", () => {
+    const content = formatNoteShowContent(
+      createNoteSummary({
+        contentApproval: { state: "pendingApproval", sourceBindingId: "ibind-1" },
+      })
+    );
+
+    expect(content).toContain("pendingApproval • binding ibind-1");
   });
 
   it("formats journal entries without entity binding", () => {

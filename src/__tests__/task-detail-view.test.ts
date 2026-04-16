@@ -18,6 +18,8 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   assigneeDisplayNames: ["Erik", "Reviewer"],
   assignees: ["Erik", "Reviewer"],
   description: "Show metadata, description, and comments inside pi.",
+  descriptionApproval: null,
+  outboundAssigneeWarnings: [],
   comments: [
     {
       id: "comment-1",
@@ -26,6 +28,7 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
       authorActorId: "actor-user",
       authorDisplayName: "Erik",
       author: "user",
+      contentApproval: null,
       createdAt: "2026-03-19T00:00:00.000Z",
     },
     {
@@ -35,6 +38,7 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
       authorActorId: "actor-user",
       authorDisplayName: "Erik",
       author: "user",
+      contentApproval: null,
       createdAt: "2026-03-19T01:00:00.000Z",
     },
   ],
@@ -52,11 +56,33 @@ describe("task detail view model", () => {
     expect(viewModel.body).toContain("Priority: high");
     expect(viewModel.body).toContain("Project: Todu Pi Extensions");
     expect(viewModel.body).toContain("Assignees: Erik, Reviewer");
+    expect(viewModel.body).toContain("Description approval: None");
     expect(viewModel.body).toContain("Labels: ui, detail");
     expect(viewModel.body).toContain("Description");
     expect(viewModel.body).toContain("Show metadata, description, and comments inside pi.");
     expect(viewModel.body).toContain("Recent comments (2)");
     expect(viewModel.body).toContain("Second note");
+  });
+
+  it("shows approval and unmapped assignee warnings when present", () => {
+    const viewModel = createTaskDetailViewModel(
+      createTaskDetail({
+        descriptionApproval: { state: "pendingApproval", sourceBindingId: "ibind-1" },
+        outboundAssigneeWarnings: [
+          {
+            bindingId: "ibind-1",
+            provider: "github",
+            targetRef: "owner/repo",
+            unmappedActorIds: ["actor-reviewer"],
+            unmappedAssigneeDisplayNames: ["Reviewer"],
+          },
+        ],
+      })
+    );
+
+    expect(viewModel.body).toContain("pendingApproval • binding ibind-1");
+    expect(viewModel.body).toContain("Skipped unmapped outbound assignee warnings");
+    expect(viewModel.body).toContain("github:owner/repo (ibind-1) • Reviewer");
   });
 
   it("creates quick action items for the detail hub", () => {

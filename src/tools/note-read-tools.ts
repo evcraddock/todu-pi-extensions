@@ -4,6 +4,7 @@ import { Type } from "@sinclair/typebox";
 
 import type { NoteEntityType, NoteFilter, NoteSummary } from "../domain/note";
 import type { NoteService } from "../services/note-service";
+import { formatApprovalSummary } from "../utils/approval-format";
 import { getSystemTimezone } from "../utils/timezone";
 
 const NOTE_ENTITY_TYPE_VALUES = ["task", "project", "habit"] as const;
@@ -190,7 +191,8 @@ const formatNoteListContent = (details: NoteListToolDetails): string => {
 const formatNoteSummaryLine = (note: NoteSummary): string => {
   const entityLabel = note.entityType ? `${note.entityType}:${note.entityId ?? "?"}` : "journal";
   const tagLabel = note.tags.length > 0 ? note.tags.join(", ") : "no tags";
-  return `${note.id} • ${entityLabel} • ${note.authorDisplayName} • ${tagLabel} • ${note.createdAt}\n    ${note.content}`;
+  const approvalLabel = formatApprovalSummary(note.contentApproval) ?? "no approval metadata";
+  return `${note.id} • ${entityLabel} • ${note.authorDisplayName} • ${tagLabel} • ${approvalLabel} • ${note.createdAt}\n    ${note.content}`;
 };
 
 const formatNoteShowContent = (note: NoteSummary): string => {
@@ -203,6 +205,7 @@ const formatNoteShowContent = (note: NoteSummary): string => {
     `Author: ${note.authorDisplayName}`,
     `Entity: ${entityLabel}`,
     `Tags: ${tagLabel}`,
+    `Approval: ${formatApprovalSummary(note.contentApproval) ?? "none"}`,
     `Created: ${note.createdAt}`,
     "",
     "Content:",

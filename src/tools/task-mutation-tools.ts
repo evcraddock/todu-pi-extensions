@@ -524,7 +524,7 @@ const resolveUpdateTaskInput = async (
       ...baseInput,
       assigneeActorIds: [...nextAssigneeActorIds],
     },
-    dependencies,
+    dependencies
   );
 };
 
@@ -546,7 +546,9 @@ const validateNextAssigneeActorIds = async (
     throw new Error(`task not found: ${input.taskId}`);
   }
 
-  const project = task.projectId ? await dependencies.projectService.getProject(task.projectId) : null;
+  const project = task.projectId
+    ? await dependencies.projectService.getProject(task.projectId)
+    : null;
   if (!project) {
     return input;
   }
@@ -579,10 +581,7 @@ const normalizeTaskCommentInput = (params: TaskCommentCreateToolParams): AddTask
   content: normalizeRequiredText(params.content, "content"),
 });
 
-const normalizeActorIdList = (
-  values: string[] | undefined,
-  fieldName: string
-): string[] => {
+const normalizeActorIdList = (values: string[] | undefined, fieldName: string): string[] => {
   if (values === undefined) {
     throw new Error(`${fieldName} is required`);
   }

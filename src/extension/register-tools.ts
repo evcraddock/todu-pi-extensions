@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 import type { ActorService } from "../services/actor-service";
+import type { ApprovalService } from "../services/approval-service";
 import type { HabitService } from "../services/habit-service";
 import type { NoteService } from "../services/note-service";
 import type { ProjectIntegrationService } from "../services/project-integration-service";
@@ -15,6 +16,8 @@ import { registerActorMutationTools } from "../tools/actor-mutation-tools";
 import { registerActorReadTools } from "../tools/actor-read-tools";
 import { registerHabitMutationTools } from "../tools/habit-mutation-tools";
 import { registerHabitReadTools } from "../tools/habit-read-tools";
+import { registerApprovalTools } from "../tools/approval-tools";
+import { registerIntegrationTools } from "../tools/integration-tools";
 import { registerNoteReadTools } from "../tools/note-read-tools";
 import { registerProjectIntegrationTools } from "../tools/project-integration-tools";
 import { registerProjectMutationTools } from "../tools/project-mutation-tools";
@@ -31,6 +34,7 @@ export interface RegisterToolDependencies {
   getRecurringService?: () => Promise<RecurringService>;
   getHabitService?: () => Promise<HabitService>;
   getNoteService?: () => Promise<NoteService>;
+  getApprovalService?: () => Promise<ApprovalService>;
   getProjectIntegrationService?: () => Promise<ProjectIntegrationService>;
 }
 
@@ -53,17 +57,26 @@ const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies 
   const getProjectIntegrationService =
     dependencies.getProjectIntegrationService ??
     (() => runtime.ensureProjectIntegrationServiceConnected());
+  const getApprovalService =
+    dependencies.getApprovalService ?? (() => runtime.ensureApprovalServiceConnected());
 
   registerTaskReadTools(pi, { getTaskService });
   registerActorReadTools(pi, { getActorService });
   registerProjectReadTools(pi, { getProjectService, getActorService, getTaskService });
   registerProjectIntegrationTools(pi, { getProjectIntegrationService, getProjectService });
+  registerIntegrationTools(pi, {
+    getProjectIntegrationService,
+    getProjectService,
+    getTaskService,
+    getActorService,
+  });
   registerProjectMutationTools(pi, { getProjectService, getActorService });
   registerRecurringReadTools(pi, { getRecurringService });
   registerRecurringMutationTools(pi, { getRecurringService, getProjectService });
   registerHabitReadTools(pi, { getHabitService });
   registerHabitMutationTools(pi, { getHabitService, getProjectService });
   registerNoteReadTools(pi, { getNoteService });
+  registerApprovalTools(pi, { getApprovalService, getActorService });
   registerActorMutationTools(pi, { getActorService });
   registerTaskMutationTools(pi, { getTaskService, getActorService, getProjectService });
 };

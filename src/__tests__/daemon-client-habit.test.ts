@@ -349,6 +349,7 @@ describe("createToduDaemonClient habit support", () => {
       authorActorId: null,
       authorDisplayName: "user",
       author: "user",
+      contentApproval: null,
       entityType: "habit",
       entityId: "habit-1",
       tags: [],

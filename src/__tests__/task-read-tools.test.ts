@@ -37,11 +37,14 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
       authorActorId: "actor-user",
       authorDisplayName: "Erik",
       author: "user",
+      contentApproval: null,
       createdAt: "2026-03-19T00:00:00.000Z",
       content: "Looks good",
     },
   ],
   ...overrides,
+  descriptionApproval: overrides.descriptionApproval ?? null,
+  outboundAssigneeWarnings: overrides.outboundAssigneeWarnings ?? [],
 });
 
 describe("registerTools", () => {
@@ -265,6 +268,7 @@ describe("createTaskShowToolDefinition", () => {
     expect(result.content[0]?.text).toContain(`Task ${task.id}: ${task.title}`);
     expect(result.content[0]?.text).toContain("Description:");
     expect(result.content[0]?.text).toContain("Assignees: Erik, Reviewer");
+    expect(result.content[0]?.text).toContain("Description approval: none");
     expect(result.content[0]?.text).toContain("Recent comments (1):");
     expect(result.details).toEqual({
       kind: "task_show",
@@ -290,6 +294,33 @@ describe("createTaskShowToolDefinition", () => {
       taskId: "task-missing",
       found: false,
     });
+  });
+
+  it("shows pending approval and outbound assignee warnings", async () => {
+    const task = createTaskDetail({
+      descriptionApproval: { state: "pendingApproval", sourceBindingId: "ibind-1" },
+      outboundAssigneeWarnings: [
+        {
+          bindingId: "ibind-1",
+          provider: "github",
+          targetRef: "owner/repo",
+          unmappedActorIds: ["actor-reviewer"],
+          unmappedAssigneeDisplayNames: ["Reviewer"],
+        },
+      ],
+    });
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(task),
+    } as unknown as TaskService;
+    const tool = createTaskShowToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+    });
+
+    const result = await tool.execute("tool-call-1", { taskId: task.id });
+
+    expect(result.content[0]?.text).toContain("pendingApproval • binding ibind-1");
+    expect(result.content[0]?.text).toContain("Skipped unmapped outbound assignee warnings:");
+    expect(result.content[0]?.text).toContain("ibind-1 • github:owner/repo • Reviewer");
   });
 
   it("surfaces service failures with tool-specific context", async () => {

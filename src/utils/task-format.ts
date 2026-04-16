@@ -5,7 +5,9 @@ const formatTaskSummary = (task: TaskSummary): string =>
     task.status,
     task.priority,
     task.projectName ?? task.projectId ?? "no-project",
-    task.assigneeDisplayNames.length > 0 ? `assignees: ${task.assigneeDisplayNames.join(", ")}` : null,
+    task.assigneeDisplayNames.length > 0
+      ? `assignees: ${task.assigneeDisplayNames.join(", ")}`
+      : null,
   ]
     .filter((value): value is string => value !== null)
     .join(" • ");

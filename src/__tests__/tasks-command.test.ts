@@ -36,6 +36,8 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   description: "Build the first task browse flow",
   comments: [],
   ...overrides,
+  descriptionApproval: overrides.descriptionApproval ?? null,
+  outboundAssigneeWarnings: overrides.outboundAssigneeWarnings ?? [],
 });
 
 const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
@@ -878,6 +880,7 @@ describe("openTaskDetailHub", () => {
           authorActorId: "actor-user",
           authorDisplayName: "Erik",
           author: "user",
+          contentApproval: null,
           createdAt: "2026-03-19T00:00:00.000Z",
         },
       ],

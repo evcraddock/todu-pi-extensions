@@ -2,11 +2,13 @@ import type {
   CreateIntegrationBindingInput,
   IntegrationBinding,
   IntegrationBindingFilter,
+  IntegrationBindingStatus,
   ProjectIntegrationGateway,
   ProjectIntegrationService,
   RegisterRepositoryProjectInput,
   RepositoryBindingCheckResult,
   RepositoryProjectRegistrationResult,
+  UpdateIntegrationBindingInput,
 } from "../project-integration-service";
 import { createProjectIntegrationService } from "../project-integration-service";
 import type { ProjectService } from "../project-service";
@@ -44,6 +46,12 @@ const createToduProjectIntegrationGateway = ({
     client.listIntegrationBindings(filter),
   createIntegrationBinding: (input: CreateIntegrationBindingInput): Promise<IntegrationBinding> =>
     client.createIntegrationBinding(input),
+  getIntegrationBinding: (bindingId: string): Promise<IntegrationBinding | null> =>
+    client.getIntegrationBinding(bindingId),
+  updateIntegrationBinding: (input: UpdateIntegrationBindingInput): Promise<IntegrationBinding> =>
+    client.updateIntegrationBinding(input),
+  getIntegrationBindingStatus: (bindingId: string): Promise<IntegrationBindingStatus | null> =>
+    client.getIntegrationBindingStatus(bindingId),
 });
 
 const createToduProjectIntegrationService = ({
@@ -62,6 +70,18 @@ const createToduProjectIntegrationService = ({
     listIntegrationBindings: (filter) =>
       runProjectIntegrationServiceOperation("listIntegrationBindings", () =>
         service.listIntegrationBindings(filter)
+      ),
+    getIntegrationBinding: (bindingId) =>
+      runProjectIntegrationServiceOperation("getIntegrationBinding", () =>
+        service.getIntegrationBinding(bindingId)
+      ),
+    updateIntegrationBinding: (input) =>
+      runProjectIntegrationServiceOperation("updateIntegrationBinding", () =>
+        service.updateIntegrationBinding(input)
+      ),
+    getIntegrationBindingStatus: (bindingId) =>
+      runProjectIntegrationServiceOperation("getIntegrationBindingStatus", () =>
+        service.getIntegrationBindingStatus(bindingId)
       ),
     checkRepositoryBinding: (input): Promise<RepositoryBindingCheckResult> =>
       runProjectIntegrationServiceOperation("checkRepositoryBinding", () =>

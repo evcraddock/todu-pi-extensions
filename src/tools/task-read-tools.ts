@@ -12,10 +12,11 @@ import type {
   TaskStatus,
   TaskSummary,
 } from "../domain/task";
-import { getSystemTimezone } from "../utils/timezone";
 import { browseTasks } from "../flows/browse-tasks";
 import { showTaskDetail } from "../flows/show-task-detail";
 import type { TaskService } from "../services/task-service";
+import { formatApprovalSummary } from "../utils/approval-format";
+import { getSystemTimezone } from "../utils/timezone";
 
 const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelled"] as const;
 const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
@@ -245,6 +246,7 @@ const formatTaskShowContent = (task: TaskDetail): string => {
     `Priority: ${task.priority}`,
     `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
     `Assignees: ${task.assigneeDisplayNames.length > 0 ? task.assigneeDisplayNames.join(", ") : "none"}`,
+    `Description approval: ${formatApprovalSummary(task.descriptionApproval) ?? "none"}`,
     `Labels: ${task.labels.length > 0 ? task.labels.join(", ") : "none"}`,
     "",
     "Description:",
@@ -259,9 +261,20 @@ const formatTaskShowContent = (task: TaskDetail): string => {
   }
 
   for (const comment of task.comments) {
-    lines.push(`- [${comment.createdAt}] ${comment.authorDisplayName}`);
+    lines.push(
+      `- [${comment.createdAt}] ${comment.authorDisplayName}${formatApprovalSummary(comment.contentApproval) ? ` • approval: ${formatApprovalSummary(comment.contentApproval)}` : ""}`
+    );
     lines.push(...indentLines(comment.content || "(empty)", 2));
     lines.push("");
+  }
+
+  if (task.outboundAssigneeWarnings.length > 0) {
+    lines.push("", "Skipped unmapped outbound assignee warnings:");
+    for (const warning of task.outboundAssigneeWarnings) {
+      lines.push(
+        `- ${warning.bindingId} • ${warning.provider}:${warning.targetRef} • ${warning.unmappedAssigneeDisplayNames.join(", ")}`
+      );
+    }
   }
 
   if (lines.at(-1) === "") {

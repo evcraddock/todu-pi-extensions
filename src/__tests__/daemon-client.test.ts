@@ -293,6 +293,7 @@ describe("createToduDaemonClient", () => {
       assigneeDisplayNames: [],
       assignees: [],
       description: "Implement the typed client wrapper",
+      descriptionApproval: null,
       comments: [
         {
           id: "note-1",
@@ -301,9 +302,11 @@ describe("createToduDaemonClient", () => {
           authorActorId: null,
           authorDisplayName: "user",
           author: "user",
+          contentApproval: null,
           createdAt: "2026-03-19T01:00:00.000Z",
         },
       ],
+      outboundAssigneeWarnings: [],
     });
   });
 
@@ -439,6 +442,7 @@ describe("createToduDaemonClient", () => {
       authorActorId: null,
       authorDisplayName: "user",
       author: "user",
+      contentApproval: null,
       createdAt: "2026-03-19T02:00:00.000Z",
     });
     expect(connection.request).toHaveBeenCalledWith("note.create", {
@@ -938,6 +942,7 @@ describe("createToduDaemonClient", () => {
         authorActorId: null,
         authorDisplayName: "user",
         author: "user",
+        contentApproval: null,
         entityType: null,
         entityId: null,
         tags: ["daily"],
