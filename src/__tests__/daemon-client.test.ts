@@ -202,6 +202,45 @@ describe("createToduDaemonClient", () => {
     ]);
   });
 
+  it("falls back cleanly when actor.list fails during actor-backed task hydration", async () => {
+    const connection = createConnectionMock();
+    connection.request
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "task-1",
+            title: "Ship wrapper",
+            status: "active",
+            priority: "high",
+            projectId: "proj-1",
+            labels: ["daemon"],
+            assigneeActorIds: ["actor-user"],
+            assignees: ["Erik"],
+            createdAt: "2026-03-19T00:00:00.000Z",
+            updatedAt: "2026-03-19T00:00:00.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: "DAEMON_UNAVAILABLE", message: "actor list unavailable" },
+      });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.listTasks()).resolves.toEqual([
+      expect.objectContaining({
+        assigneeDisplayNames: ["Erik"],
+      }),
+    ]);
+  });
+
   it("hydrates task detail with task notes", async () => {
     const connection = createConnectionMock();
     connection.request

@@ -172,7 +172,7 @@ const createToduDaemonClient = ({
   async listTasks(filter = {}): Promise<TaskSummary[]> {
     const tasks = await listRawTasks(connection, filter);
     const actorMap = hasActorBackedTaskAssignments(tasks)
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return tasks.map((task) => mapTaskSummary(task, actorMap));
   },
@@ -189,7 +189,7 @@ const createToduDaemonClient = ({
 
     const comments = await fetchTaskComments(connection, taskId);
     const actorMap = shouldLoadTaskActors(taskResult.value, comments)
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return mapTaskDetail(taskResult.value, comments, actorMap);
   },
@@ -203,7 +203,7 @@ const createToduDaemonClient = ({
     }
 
     const actorMap = hasActorBackedTaskAssignments([taskResult.value])
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return mapTaskDetail(taskResult.value, [], actorMap);
   },
@@ -219,7 +219,7 @@ const createToduDaemonClient = ({
 
     const comments = await fetchTaskComments(connection, input.taskId);
     const actorMap = shouldLoadTaskActors(taskResult.value, comments)
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return mapTaskDetail(taskResult.value, comments, actorMap);
   },
@@ -237,7 +237,7 @@ const createToduDaemonClient = ({
     }
 
     const actorMap = noteResult.value.authorActorId
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return mapTaskComment(noteResult.value, actorMap);
   },
@@ -265,7 +265,7 @@ const createToduDaemonClient = ({
 
     const comments = await fetchTaskComments(connection, result.value.id);
     const actorMap = shouldLoadTaskActors(result.value, comments)
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return {
       sourceTaskId: input.taskId,
@@ -513,7 +513,7 @@ const createToduDaemonClient = ({
     }
 
     const actorMap = noteResult.value.authorActorId
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return mapNoteSummary(noteResult.value, actorMap);
   },
@@ -541,7 +541,7 @@ const createToduDaemonClient = ({
     }
 
     const actorMap = result.value.authorActorId
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return mapNoteSummary(result.value, actorMap);
   },
@@ -555,7 +555,7 @@ const createToduDaemonClient = ({
     }
 
     const actorMap = result.value.some((note) => note.authorActorId)
-      ? buildActorMap(await listActors(connection))
+      ? buildActorMap(await listActorsBestEffort(connection))
       : new Map<string, ActorSummary>();
     return result.value.map((note) => mapNoteSummary(note, actorMap));
   },
@@ -658,6 +658,16 @@ const listActors = async (
   }));
 };
 
+const listActorsBestEffort = async (
+  connection: Pick<ToduDaemonConnection, "request">
+): Promise<ActorSummary[]> => {
+  try {
+    return await listActors(connection);
+  } catch {
+    return [];
+  }
+};
+
 const buildActorMap = (actors: ActorSummary[]): Map<string, ActorSummary> =>
   new Map(actors.map((actor) => [actor.id, actor]));
 
@@ -713,7 +723,7 @@ const fetchTaskComments = async (
   }
 
   const actorMap = notes.value.some((note) => note.authorActorId)
-    ? buildActorMap(await listActors(connection))
+    ? buildActorMap(await listActorsBestEffort(connection))
     : new Map<string, ActorSummary>();
   return notes.value.map((note) => mapTaskComment(note, actorMap));
 };
