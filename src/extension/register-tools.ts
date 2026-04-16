@@ -58,7 +58,7 @@ const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies 
   registerActorReadTools(pi, { getActorService });
   registerProjectReadTools(pi, { getProjectService, getActorService, getTaskService });
   registerProjectIntegrationTools(pi, { getProjectIntegrationService, getProjectService });
-  registerProjectMutationTools(pi, { getProjectService });
+  registerProjectMutationTools(pi, { getProjectService, getActorService });
   registerRecurringReadTools(pi, { getRecurringService });
   registerRecurringMutationTools(pi, { getRecurringService, getProjectService });
   registerHabitReadTools(pi, { getHabitService });
