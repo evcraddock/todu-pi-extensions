@@ -161,6 +161,47 @@ describe("createToduDaemonClient", () => {
     expect(tasks[1]?.id).toBe("task-b");
   });
 
+  it("uses legacy assignee names when actor ids cannot be resolved", async () => {
+    const connection = createConnectionMock();
+    connection.request
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [
+          {
+            id: "task-1",
+            title: "Ship wrapper",
+            status: "active",
+            priority: "high",
+            projectId: "proj-1",
+            labels: ["daemon"],
+            assigneeActorIds: ["actor-user", "actor-reviewer"],
+            assignees: ["Erik", "Reviewer"],
+            createdAt: "2026-03-19T00:00:00.000Z",
+            updatedAt: "2026-03-19T00:00:00.000Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: [{ id: "actor-reviewer", displayName: "Reviewer" }],
+      });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.listTasks()).resolves.toEqual([
+      expect.objectContaining({
+        assigneeActorIds: ["actor-user", "actor-reviewer"],
+        assigneeDisplayNames: ["Erik", "Reviewer"],
+        assignees: ["Erik", "Reviewer"],
+      }),
+    ]);
+  });
+
   it("hydrates task detail with task notes", async () => {
     const connection = createConnectionMock();
     connection.request

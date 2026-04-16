@@ -679,7 +679,9 @@ const resolveActorDisplayNames = (
   fallbackNames: readonly string[] = []
 ): string[] => {
   if (actorIds.length > 0) {
-    return actorIds.map((actorId) => resolveActorDisplayName(actorId, actorMap));
+    return actorIds.map((actorId, index) =>
+      resolveActorDisplayName(actorId, actorMap, fallbackNames[index])
+    );
   }
 
   return fallbackNames.filter((name) => name.trim().length > 0);
