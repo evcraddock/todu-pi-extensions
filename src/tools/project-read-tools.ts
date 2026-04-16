@@ -109,12 +109,18 @@ const createProjectShowToolDefinition = ({
       };
 
       const [actors, tasks] = await Promise.all([
-        getActorService ? getActorService().then((service) => service.listActors()) : Promise.resolve([]),
-        getTaskService ? getTaskService().then((service) => service.listTasks({ projectId: project.id })) : Promise.resolve([]),
+        getActorService
+          ? getActorService().then((service) => service.listActors())
+          : Promise.resolve([]),
+        getTaskService
+          ? getTaskService().then((service) => service.listTasks({ projectId: project.id }))
+          : Promise.resolve([]),
       ]);
 
       return {
-        content: [{ type: "text" as const, text: formatProjectShowContent(project, actors, tasks) }],
+        content: [
+          { type: "text" as const, text: formatProjectShowContent(project, actors, tasks) },
+        ],
         details,
       };
     } catch (error) {

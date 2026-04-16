@@ -20,7 +20,9 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   assigneeDisplayNames: overrides.assigneeDisplayNames ?? ["Erik"],
   assignees: overrides.assignees ?? ["Erik"],
   description: overrides.description ?? "Persist and restore current task context",
+  descriptionApproval: overrides.descriptionApproval ?? null,
   comments: overrides.comments ?? [],
+  outboundAssigneeWarnings: overrides.outboundAssigneeWarnings ?? [],
 });
 
 const createContext = (

@@ -149,9 +149,11 @@ describe("createProjectUpdateToolDefinition", () => {
       getProject: vi
         .fn()
         .mockResolvedValue(createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })),
-      updateProject: vi.fn().mockResolvedValue(
-        createProjectSummary({ authorizedAssigneeActorIds: ["actor-user", "actor-reviewer"] })
-      ),
+      updateProject: vi
+        .fn()
+        .mockResolvedValue(
+          createProjectSummary({ authorizedAssigneeActorIds: ["actor-user", "actor-reviewer"] })
+        ),
     } as unknown as ProjectService;
     const actorService = {
       listActors: vi.fn().mockResolvedValue([
@@ -182,7 +184,9 @@ describe("createProjectUpdateToolDefinition", () => {
       updateProject: vi.fn(),
     } as unknown as ProjectService;
     const actorService = {
-      listActors: vi.fn().mockResolvedValue([{ id: "actor-user", displayName: "Erik", archived: false }]),
+      listActors: vi
+        .fn()
+        .mockResolvedValue([{ id: "actor-user", displayName: "Erik", archived: false }]),
     } as unknown as ActorService;
     const tool = createProjectUpdateToolDefinition({
       getProjectService: vi.fn().mockResolvedValue(projectService),

@@ -1,4 +1,9 @@
-import type { TaskDetail, TaskFilter, TaskSummary } from "../../domain/task";
+import type {
+  OutboundAssigneeWarning,
+  TaskDetail,
+  TaskFilter,
+  TaskSummary,
+} from "../../domain/task";
 import type { TaskService } from "../task-service";
 import { ToduDaemonClientError, type ToduDaemonClient } from "./daemon-client";
 
@@ -76,7 +81,9 @@ const listTasksWithProjectNames = async (
   const projectMap = new Map(projects.map((project) => [project.id, project]));
   const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
 
-  return tasks.map((task) => hydrateTaskSummaryMetadata(task, projectMap.get(task.projectId ?? "") ?? null, actorMap));
+  return tasks.map((task) =>
+    hydrateTaskSummaryMetadata(task, projectMap.get(task.projectId ?? "") ?? null, actorMap)
+  );
 };
 
 const hydrateTaskDetailProjectName = async (
@@ -88,11 +95,12 @@ const hydrateTaskDetailProjectName = async (
     listActorsBestEffort(client),
   ]);
 
-  return hydrateTaskDetailMetadata(
-    task,
-    project,
-    new Map(actors.map((actor) => [actor.id, actor]))
-  );
+  const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
+  const outboundAssigneeWarnings = task.projectId
+    ? await buildOutboundAssigneeWarnings(client, task.projectId, task.assigneeActorIds, actorMap)
+    : [];
+
+  return hydrateTaskDetailMetadata(task, project, actorMap, outboundAssigneeWarnings);
 };
 
 const listActorsBestEffort = async (client: ToduDaemonClient) => {
@@ -116,11 +124,13 @@ const hydrateTaskSummaryMetadata = (
 const hydrateTaskDetailMetadata = (
   task: TaskDetail,
   project: { name: string; authorizedAssigneeActorIds: string[] } | null,
-  actorMap: Map<string, { displayName: string; archived: boolean }>
+  actorMap: Map<string, { displayName: string; archived: boolean }>,
+  outboundAssigneeWarnings: OutboundAssigneeWarning[] = []
 ): TaskDetail => ({
   ...task,
   projectName: project?.name ?? null,
   assigneeDisplayNames: annotateAssigneeDisplayNames(task, project, actorMap),
+  outboundAssigneeWarnings,
 });
 
 const annotateAssigneeDisplayNames = (
@@ -131,7 +141,8 @@ const annotateAssigneeDisplayNames = (
   const authorizedActorIds = new Set(project?.authorizedAssigneeActorIds ?? []);
   return task.assigneeActorIds.map((actorId, index) => {
     const actor = actorMap.get(actorId);
-    const baseLabel = task.assigneeDisplayNames[index] ?? task.assignees[index] ?? actor?.displayName ?? actorId;
+    const baseLabel =
+      task.assigneeDisplayNames[index] ?? task.assignees[index] ?? actor?.displayName ?? actorId;
     const suffixes: string[] = [];
     if (actor?.archived) {
       suffixes.push("archived");
@@ -141,6 +152,46 @@ const annotateAssigneeDisplayNames = (
     }
 
     return suffixes.length > 0 ? `${baseLabel} (${suffixes.join(", ")})` : baseLabel;
+  });
+};
+
+const buildOutboundAssigneeWarnings = async (
+  client: ToduDaemonClient,
+  projectId: string,
+  assigneeActorIds: string[],
+  actorMap: Map<string, { displayName: string; archived: boolean }>
+): Promise<OutboundAssigneeWarning[]> => {
+  let bindings: Awaited<ReturnType<ToduDaemonClient["listIntegrationBindings"]>> = [];
+  try {
+    if (typeof client.listIntegrationBindings === "function") {
+      bindings = (await client.listIntegrationBindings({ projectId, enabled: true })) ?? [];
+    }
+  } catch {
+    bindings = [];
+  }
+
+  return bindings.flatMap((binding) => {
+    const mappedActorIds = new Set(
+      Array.isArray(binding.options?.actorMappings)
+        ? binding.options.actorMappings.map((mapping) => mapping.actorId)
+        : []
+    );
+    const unmappedActorIds = assigneeActorIds.filter((actorId) => !mappedActorIds.has(actorId));
+    if (unmappedActorIds.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        bindingId: binding.id,
+        provider: binding.provider,
+        targetRef: binding.targetRef,
+        unmappedActorIds,
+        unmappedAssigneeDisplayNames: unmappedActorIds.map(
+          (actorId) => actorMap.get(actorId)?.displayName ?? actorId
+        ),
+      },
+    ];
   });
 };
 

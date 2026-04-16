@@ -1,4 +1,27 @@
 import type { ProjectSummary, TaskPriority } from "../domain/task";
+
+export interface IntegrationBindingActorMapping {
+  actorId: string;
+  externalAccountId?: string;
+  externalLogin?: string;
+  displayName?: string;
+  trusted?: boolean;
+}
+
+export interface IntegrationBindingOptions {
+  actorMappings?: IntegrationBindingActorMapping[];
+  [key: string]: unknown;
+}
+
+export interface IntegrationBindingStatus {
+  bindingId: string;
+  state: "running" | "idle" | "blocked" | "error";
+  authorityId: string | null;
+  lastSuccessfulSyncAt: string | null;
+  lastAttemptedSyncAt: string | null;
+  lastErrorSummary: string | null;
+  updatedAt: string;
+}
 import type { ProjectService } from "./project-service";
 import type { RepoContextService, ResolvedRepositoryContext } from "./repo-context";
 
@@ -12,7 +35,7 @@ export interface IntegrationBinding {
   targetRef: string;
   strategy: IntegrationSyncStrategy;
   enabled: boolean;
-  options?: Record<string, unknown>;
+  options?: IntegrationBindingOptions;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,7 +47,18 @@ export interface CreateIntegrationBindingInput {
   targetRef: string;
   strategy?: IntegrationSyncStrategy;
   enabled?: boolean;
-  options?: Record<string, unknown>;
+  options?: IntegrationBindingOptions;
+}
+
+export interface UpdateIntegrationBindingInput {
+  bindingId: string;
+  provider?: string;
+  projectId?: string;
+  targetKind?: string;
+  targetRef?: string;
+  strategy?: IntegrationSyncStrategy;
+  enabled?: boolean;
+  options?: IntegrationBindingOptions;
 }
 
 export interface IntegrationBindingFilter {
@@ -95,6 +129,9 @@ export interface RegisterRepositoryProjectInput {
 
 export interface ProjectIntegrationService {
   listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
+  getIntegrationBinding(bindingId: string): Promise<IntegrationBinding | null>;
+  updateIntegrationBinding(input: UpdateIntegrationBindingInput): Promise<IntegrationBinding>;
+  getIntegrationBindingStatus(bindingId: string): Promise<IntegrationBindingStatus | null>;
   checkRepositoryBinding(input?: {
     repositoryPath?: string;
     provider?: string;
@@ -108,6 +145,9 @@ export interface ProjectIntegrationService {
 export interface ProjectIntegrationGateway {
   listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
   createIntegrationBinding(input: CreateIntegrationBindingInput): Promise<IntegrationBinding>;
+  getIntegrationBinding(bindingId: string): Promise<IntegrationBinding | null>;
+  updateIntegrationBinding(input: UpdateIntegrationBindingInput): Promise<IntegrationBinding>;
+  getIntegrationBindingStatus(bindingId: string): Promise<IntegrationBindingStatus | null>;
 }
 
 export interface ProjectIntegrationServiceDependencies {
@@ -122,6 +162,9 @@ const createProjectIntegrationService = ({
   gateway,
 }: ProjectIntegrationServiceDependencies): ProjectIntegrationService => ({
   listIntegrationBindings: (filter) => gateway.listIntegrationBindings(filter),
+  getIntegrationBinding: (bindingId) => gateway.getIntegrationBinding(bindingId),
+  updateIntegrationBinding: (input) => gateway.updateIntegrationBinding(input),
+  getIntegrationBindingStatus: (bindingId) => gateway.getIntegrationBindingStatus(bindingId),
   checkRepositoryBinding: async (input = {}) => {
     const repositoryResolution = await resolveRepositoryInput(repoContextService, input);
     if (repositoryResolution.kind !== "resolved") {

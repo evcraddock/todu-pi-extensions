@@ -32,6 +32,8 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   description: "Add create, update, and comment tools.",
   comments: [],
   ...overrides,
+  descriptionApproval: overrides.descriptionApproval ?? null,
+  outboundAssigneeWarnings: overrides.outboundAssigneeWarnings ?? [],
 });
 
 const createTaskComment = (overrides: Partial<TaskComment> = {}): TaskComment => ({
@@ -43,6 +45,7 @@ const createTaskComment = (overrides: Partial<TaskComment> = {}): TaskComment =>
   createdAt: "2026-03-19T00:00:00.000Z",
   content: "Looks good",
   ...overrides,
+  contentApproval: overrides.contentApproval ?? null,
 });
 
 const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
@@ -150,9 +153,11 @@ describe("resolveUpdateTaskInput", () => {
 
   it("supports incremental assignee updates", async () => {
     const taskService = {
-      getTask: vi.fn().mockResolvedValue(
-        createTaskDetail({ assigneeActorIds: ["actor-user"], assigneeDisplayNames: ["Erik"] })
-      ),
+      getTask: vi
+        .fn()
+        .mockResolvedValue(
+          createTaskDetail({ assigneeActorIds: ["actor-user"], assigneeDisplayNames: ["Erik"] })
+        ),
     } as unknown as TaskService;
 
     await expect(
@@ -411,9 +416,9 @@ describe("createTaskUpdateToolDefinition", () => {
       ]),
     } as never;
     const projectService = {
-      getProject: vi.fn().mockResolvedValue(
-        createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })
-      ),
+      getProject: vi
+        .fn()
+        .mockResolvedValue(createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })),
     } as never;
     const tool = createTaskUpdateToolDefinition({
       getTaskService: vi.fn().mockResolvedValue(taskService),
@@ -444,9 +449,9 @@ describe("createTaskUpdateToolDefinition", () => {
       ]),
     } as never;
     const projectService = {
-      getProject: vi.fn().mockResolvedValue(
-        createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })
-      ),
+      getProject: vi
+        .fn()
+        .mockResolvedValue(createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })),
     } as never;
     const tool = createTaskUpdateToolDefinition({
       getTaskService: vi.fn().mockResolvedValue(taskService),

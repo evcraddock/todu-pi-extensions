@@ -58,6 +58,9 @@ describe("createProjectIntegrationService", () => {
       gateway: {
         listIntegrationBindings: vi.fn().mockResolvedValue([createBinding()]),
         createIntegrationBinding: vi.fn(),
+        getIntegrationBinding: vi.fn(),
+        updateIntegrationBinding: vi.fn(),
+        getIntegrationBindingStatus: vi.fn(),
       },
     });
 
@@ -95,6 +98,9 @@ describe("createProjectIntegrationService", () => {
           .fn()
           .mockResolvedValue([createBinding(), createBinding({ id: "ibind-2" })]),
         createIntegrationBinding: vi.fn(),
+        getIntegrationBinding: vi.fn(),
+        updateIntegrationBinding: vi.fn(),
+        getIntegrationBindingStatus: vi.fn(),
       },
     });
 
@@ -130,6 +136,9 @@ describe("createProjectIntegrationService", () => {
       gateway: {
         listIntegrationBindings: vi.fn().mockResolvedValue([]),
         createIntegrationBinding: vi.fn(),
+        getIntegrationBinding: vi.fn(),
+        updateIntegrationBinding: vi.fn(),
+        getIntegrationBindingStatus: vi.fn(),
       },
     });
 
@@ -167,6 +176,9 @@ describe("createProjectIntegrationService", () => {
       gateway: {
         listIntegrationBindings: vi.fn().mockResolvedValue([]),
         createIntegrationBinding,
+        getIntegrationBinding: vi.fn(),
+        updateIntegrationBinding: vi.fn(),
+        getIntegrationBindingStatus: vi.fn(),
       },
     });
 
@@ -217,6 +229,9 @@ describe("createProjectIntegrationService", () => {
         createIntegrationBinding: vi
           .fn()
           .mockResolvedValue(createBinding({ provider: "forgejo", targetRef: "team/custom" })),
+        getIntegrationBinding: vi.fn(),
+        updateIntegrationBinding: vi.fn(),
+        getIntegrationBindingStatus: vi.fn(),
       },
     });
 

@@ -65,6 +65,12 @@ describe("createToduTaskService", () => {
       renameActor: vi.fn(),
       archiveActor: vi.fn(),
       unarchiveActor: vi.fn(),
+      getIntegrationBinding: vi.fn(),
+      updateIntegrationBinding: vi.fn(),
+      getIntegrationBindingStatus: vi.fn(),
+      listApprovals: vi.fn(),
+      approveTaskDescription: vi.fn(),
+      approveNoteContent: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -92,7 +98,9 @@ describe("createToduTaskService", () => {
       assigneeDisplayNames: ["Erik"],
       assignees: ["Erik"],
       description: "Create the initial module layout",
+      descriptionApproval: null,
       comments: [],
+      outboundAssigneeWarnings: [],
     };
     const project: ProjectSummary = {
       id: "proj-1",
@@ -138,6 +146,12 @@ describe("createToduTaskService", () => {
       renameActor: vi.fn(),
       archiveActor: vi.fn(),
       unarchiveActor: vi.fn(),
+      getIntegrationBinding: vi.fn(),
+      updateIntegrationBinding: vi.fn(),
+      getIntegrationBindingStatus: vi.fn(),
+      listApprovals: vi.fn(),
+      approveTaskDescription: vi.fn(),
+      approveNoteContent: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -155,6 +169,7 @@ describe("createToduTaskService", () => {
         "Priority: high",
         "Project: Foundation",
         "Assignees: Erik",
+        "Description approval: None",
         "Labels: foundation",
         "",
         "Description",
@@ -211,6 +226,12 @@ describe("createToduTaskService", () => {
       renameActor: vi.fn(),
       archiveActor: vi.fn(),
       unarchiveActor: vi.fn(),
+      getIntegrationBinding: vi.fn(),
+      updateIntegrationBinding: vi.fn(),
+      getIntegrationBindingStatus: vi.fn(),
+      listApprovals: vi.fn(),
+      approveTaskDescription: vi.fn(),
+      approveNoteContent: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -292,6 +313,12 @@ describe("createToduTaskService", () => {
       renameActor: vi.fn(),
       archiveActor: vi.fn(),
       unarchiveActor: vi.fn(),
+      getIntegrationBinding: vi.fn(),
+      updateIntegrationBinding: vi.fn(),
+      getIntegrationBindingStatus: vi.fn(),
+      listApprovals: vi.fn(),
+      approveTaskDescription: vi.fn(),
+      approveNoteContent: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -328,7 +355,9 @@ describe("createToduTaskService", () => {
       assigneeDisplayNames: ["Erik"],
       assignees: ["Erik"],
       description: "Create the initial module layout",
+      descriptionApproval: null,
       comments: [],
+      outboundAssigneeWarnings: [],
     };
     const project: ProjectSummary = {
       id: "proj-1",
@@ -384,6 +413,12 @@ describe("createToduTaskService", () => {
       renameActor: vi.fn(),
       archiveActor: vi.fn(),
       unarchiveActor: vi.fn(),
+      getIntegrationBinding: vi.fn(),
+      updateIntegrationBinding: vi.fn(),
+      getIntegrationBindingStatus: vi.fn(),
+      listApprovals: vi.fn(),
+      approveTaskDescription: vi.fn(),
+      approveNoteContent: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -449,6 +484,8 @@ describe("createToduTaskService", () => {
       assigneeDisplayNames: ["Reviewer"],
       assignees: ["Reviewer"],
       description: null,
+      descriptionApproval: null,
+      outboundAssigneeWarnings: [],
       comments: [],
     };
     const client = {

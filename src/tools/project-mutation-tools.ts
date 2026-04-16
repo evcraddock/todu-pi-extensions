@@ -329,7 +329,9 @@ const resolveUpdateProjectInput = async (
     {
       projectId,
       name: hasOwn(params, "name") ? normalizeRequiredText(params.name ?? "", "name") : undefined,
-      description: hasOwn(params, "description") ? normalizeNullableText(params.description) : undefined,
+      description: hasOwn(params, "description")
+        ? normalizeNullableText(params.description)
+        : undefined,
       status: params.status,
       priority: params.priority,
       authorizedAssigneeActorIds: [...nextAuthorizedActorIds],
@@ -369,7 +371,9 @@ const normalizeActorIdList = (values: string[] | undefined, fieldName: string): 
   }
 
   return [
-    ...new Set(values.map((value, index) => normalizeRequiredText(value ?? "", `${fieldName}[${index}]`))),
+    ...new Set(
+      values.map((value, index) => normalizeRequiredText(value ?? "", `${fieldName}[${index}]`))
+    ),
   ];
 };
 

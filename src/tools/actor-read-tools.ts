@@ -60,8 +60,7 @@ const formatActorListContent = (details: ActorListToolDetails): string => {
   return [
     `Actors (${details.total}):`,
     ...details.actors.map(
-      (actor) =>
-        `- ${actor.id} • ${actor.displayName} • ${actor.archived ? "archived" : "active"}`
+      (actor) => `- ${actor.id} • ${actor.displayName} • ${actor.archived ? "archived" : "active"}`
     ),
   ].join("\n");
 };

@@ -148,7 +148,10 @@ const registerActorMutationTools = (
   pi.registerTool(createActorUnarchiveToolDefinition(dependencies));
 };
 
-const normalizeCreateActorInput = (params: { id: string; displayName: string }): CreateActorInput => ({
+const normalizeCreateActorInput = (params: {
+  id: string;
+  displayName: string;
+}): CreateActorInput => ({
   id: normalizeRequiredText(params.id, "id"),
   displayName: normalizeRequiredText(params.displayName, "displayName"),
 });

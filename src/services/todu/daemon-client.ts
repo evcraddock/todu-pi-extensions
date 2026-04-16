@@ -4,6 +4,7 @@ import type {
   HabitStreak as ToduHabitStreak,
   IntegrationBinding as ToduIntegrationBinding,
   IntegrationBindingFilter as ToduIntegrationBindingFilter,
+  IntegrationBindingStatus as ToduIntegrationBindingStatus,
   Note as ToduNote,
   NoteFilter as ToduNoteFilter,
   Project as ToduProject,
@@ -14,6 +15,7 @@ import type {
   TaskPriority as ToduTaskPriority,
   TaskStatus as ToduTaskStatus,
   TaskWithDetail as ToduTaskWithDetail,
+  UpdateIntegrationBindingInput as ToduUpdateIntegrationBindingInput,
 } from "@todu/core";
 
 import type {
@@ -23,6 +25,11 @@ import type {
   HabitStreak,
   HabitSummary,
 } from "../../domain/habit";
+import type {
+  ApprovalItem,
+  ApprovalListFilter,
+  ImportedContentApproval,
+} from "../../domain/approval";
 import type { NoteEntityType, NoteFilter, NoteSummary } from "../../domain/note";
 import type {
   RecurringFilter,
@@ -50,6 +57,8 @@ import type {
   CreateIntegrationBindingInput,
   IntegrationBinding,
   IntegrationBindingFilter,
+  IntegrationBindingStatus,
+  UpdateIntegrationBindingInput,
 } from "../project-integration-service";
 import type {
   CreateProjectInput,
@@ -136,7 +145,13 @@ export interface ToduDaemonClient {
   updateRecurring(input: UpdateRecurringInput): Promise<RecurringTemplateDetail>;
   deleteRecurring(recurringId: string): Promise<DeleteRecurringResult>;
   listIntegrationBindings(filter?: IntegrationBindingFilter): Promise<IntegrationBinding[]>;
+  getIntegrationBinding(bindingId: string): Promise<IntegrationBinding | null>;
   createIntegrationBinding(input: CreateIntegrationBindingInput): Promise<IntegrationBinding>;
+  updateIntegrationBinding(input: UpdateIntegrationBindingInput): Promise<IntegrationBinding>;
+  getIntegrationBindingStatus(bindingId: string): Promise<IntegrationBindingStatus | null>;
+  listApprovals(filter?: ApprovalListFilter): Promise<ApprovalItem[]>;
+  approveTaskDescription(taskId: string): Promise<ApprovalItem>;
+  approveNoteContent(noteId: string): Promise<ApprovalItem>;
   deleteTask(taskId: TaskId): Promise<DeleteTaskResult>;
   moveTask(input: MoveTaskInput): Promise<MoveTaskResult>;
   listHabits(filter?: HabitFilter): Promise<HabitSummary[]>;
@@ -166,10 +181,19 @@ type ToduActorLike = {
   archived?: boolean;
 };
 
+type ToduApprovalItem = ApprovalItem;
+type ToduApprovalListFilter = ApprovalListFilter;
+
 type ToduProjectWithActorFields = ToduProject & { authorizedAssigneeActorIds?: string[] };
 type ToduTaskWithActorFields = ToduTask & { assigneeActorIds?: string[] };
-type ToduTaskWithDetailWithActorFields = ToduTaskWithDetail & { assigneeActorIds?: string[] };
-type ToduNoteWithActorFields = ToduNote & { authorActorId?: string };
+type ToduTaskWithDetailWithActorFields = ToduTaskWithDetail & {
+  assigneeActorIds?: string[];
+  descriptionApproval?: ImportedContentApproval;
+};
+type ToduNoteWithActorFields = ToduNote & {
+  authorActorId?: string;
+  contentApproval?: ImportedContentApproval;
+};
 type ToduNoteFilterWithActorFields = ToduNoteFilter & { authorActorId?: string };
 
 const createToduDaemonClient = ({
@@ -184,7 +208,9 @@ const createToduDaemonClient = ({
   },
 
   async getTask(taskId: TaskId): Promise<TaskDetail | null> {
-    const taskResult = await connection.request<ToduTaskWithDetailWithActorFields>("task.get", { id: taskId });
+    const taskResult = await connection.request<ToduTaskWithDetailWithActorFields>("task.get", {
+      id: taskId,
+    });
     if (!taskResult.ok) {
       if (taskResult.error.code === "NOT_FOUND") {
         return null;
@@ -332,7 +358,9 @@ const createToduDaemonClient = ({
   },
 
   async getProject(projectId: string): Promise<ToduProjectSummary | null> {
-    const result = await connection.request<ToduProjectWithActorFields>("project.get", { id: projectId });
+    const result = await connection.request<ToduProjectWithActorFields>("project.get", {
+      id: projectId,
+    });
     if (!result.ok) {
       if (result.error.code === "NOT_FOUND") {
         return null;
@@ -453,6 +481,21 @@ const createToduDaemonClient = ({
     return result.value.map(mapIntegrationBinding);
   },
 
+  async getIntegrationBinding(bindingId: string): Promise<IntegrationBinding | null> {
+    const result = await connection.request<ToduIntegrationBinding>("integration.get", {
+      id: bindingId,
+    });
+    if (!result.ok) {
+      if (result.error.code === "NOT_FOUND") {
+        return null;
+      }
+
+      throw mapDaemonErrorToClientError("integration.get", result.error);
+    }
+
+    return mapIntegrationBinding(result.value);
+  },
+
   async createIntegrationBinding(
     input: CreateIntegrationBindingInput
   ): Promise<IntegrationBinding> {
@@ -464,6 +507,68 @@ const createToduDaemonClient = ({
     }
 
     return mapIntegrationBinding(result.value);
+  },
+
+  async updateIntegrationBinding(
+    input: UpdateIntegrationBindingInput
+  ): Promise<IntegrationBinding> {
+    const result = await connection.request<ToduIntegrationBinding>("integration.update", {
+      id: input.bindingId,
+      input: mapUpdateIntegrationBindingInput(input),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("integration.update", result.error);
+    }
+
+    return mapIntegrationBinding(result.value);
+  },
+
+  async getIntegrationBindingStatus(bindingId: string): Promise<IntegrationBindingStatus | null> {
+    const result = await connection.request<ToduIntegrationBindingStatus>("integration.status", {
+      id: bindingId,
+    });
+    if (!result.ok) {
+      if (result.error.code === "NOT_FOUND") {
+        return null;
+      }
+
+      throw mapDaemonErrorToClientError("integration.status", result.error);
+    }
+
+    return mapIntegrationBindingStatus(result.value);
+  },
+
+  async listApprovals(filter: ApprovalListFilter = {}): Promise<ApprovalItem[]> {
+    const result = await connection.request<ToduApprovalItem[]>("approval.list", {
+      filter: mapApprovalListFilter(filter),
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("approval.list", result.error);
+    }
+
+    return result.value.map(mapApprovalItem);
+  },
+
+  async approveTaskDescription(taskId: string): Promise<ApprovalItem> {
+    const result = await connection.request<ToduApprovalItem>("approval.approveTaskDescription", {
+      taskId,
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("approval.approveTaskDescription", result.error);
+    }
+
+    return mapApprovalItem(result.value);
+  },
+
+  async approveNoteContent(noteId: string): Promise<ApprovalItem> {
+    const result = await connection.request<ToduApprovalItem>("approval.approveNoteContent", {
+      noteId,
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("approval.approveNoteContent", result.error);
+    }
+
+    return mapApprovalItem(result.value);
   },
 
   async listHabits(filter: HabitFilter = {}): Promise<HabitSummary[]> {
@@ -746,8 +851,7 @@ const resolveActorDisplayNames = (
 
 const hasActorBackedTaskAssignments = (
   tasks: ReadonlyArray<{ assigneeActorIds?: string[] }>
-): boolean =>
-  tasks.some((task) => (task.assigneeActorIds ?? []).length > 0);
+): boolean => tasks.some((task) => (task.assigneeActorIds ?? []).length > 0);
 
 const shouldLoadTaskActors = (
   task: { assigneeActorIds?: string[] },
@@ -802,7 +906,9 @@ const mapTaskDetail = (
 ): TaskDetail => ({
   ...mapTaskSummary(task, actorMap),
   description: task.description ?? null,
+  descriptionApproval: mapImportedContentApproval(task.descriptionApproval),
   comments,
+  outboundAssigneeWarnings: [],
 });
 
 const mapTaskComment = (
@@ -815,6 +921,7 @@ const mapTaskComment = (
   authorActorId: note.authorActorId ?? null,
   authorDisplayName: resolveActorDisplayName(note.authorActorId, actorMap, note.author),
   author: note.author ?? null,
+  contentApproval: mapImportedContentApproval(note.contentApproval),
   createdAt: note.createdAt,
 });
 
@@ -827,6 +934,7 @@ const mapNoteSummary = (
   authorActorId: note.authorActorId ?? null,
   authorDisplayName: resolveActorDisplayName(note.authorActorId, actorMap, note.author),
   author: note.author ?? null,
+  contentApproval: mapImportedContentApproval(note.contentApproval),
   entityType: (note.entityType as NoteEntityType) ?? null,
   entityId: note.entityId ?? null,
   tags: [...note.tags],
@@ -865,6 +973,39 @@ const mapIntegrationBinding = (binding: ToduIntegrationBinding): IntegrationBind
   options: binding.options,
   createdAt: binding.createdAt,
   updatedAt: binding.updatedAt,
+});
+
+const mapIntegrationBindingStatus = (
+  status: ToduIntegrationBindingStatus
+): IntegrationBindingStatus => ({
+  bindingId: status.bindingId,
+  state: status.state,
+  authorityId: status.authorityId,
+  lastSuccessfulSyncAt: status.lastSuccessfulSyncAt,
+  lastAttemptedSyncAt: status.lastAttemptedSyncAt,
+  lastErrorSummary: status.lastErrorSummary,
+  updatedAt: status.updatedAt,
+});
+
+const mapImportedContentApproval = (
+  approval: ImportedContentApproval | null | undefined
+): ImportedContentApproval | null => (approval ? { ...approval } : null);
+
+const mapApprovalItem = (item: ToduApprovalItem): ApprovalItem => ({
+  kind: item.kind,
+  state: item.state,
+  taskId: item.taskId,
+  noteId: item.noteId,
+  projectId: item.projectId,
+  taskTitle: item.taskTitle,
+  entityType: item.entityType,
+  entityId: item.entityId,
+  contentPreview: item.contentPreview,
+  sourceBindingId: item.sourceBindingId,
+  sourceActorId: item.sourceActorId,
+  sourceFingerprint: item.sourceFingerprint,
+  reviewedAt: item.reviewedAt,
+  reviewedByActorId: item.reviewedByActorId,
 });
 
 const mapRecurringTemplateSummary = (
@@ -954,7 +1095,6 @@ const mapHabitFilter = (filter: HabitFilter): ToduHabitFilter => ({
   search: filter.query,
 });
 
-
 const mapCreateRecurringInput = (input: CreateRecurringInput): Record<string, unknown> => ({
   title: input.title,
   projectId: input.projectId,
@@ -1006,6 +1146,22 @@ const mapCreateIntegrationBindingInput = (
   options: input.options,
 });
 
+const mapUpdateIntegrationBindingInput = (
+  input: UpdateIntegrationBindingInput
+): ToduUpdateIntegrationBindingInput => ({
+  provider: input.provider,
+  projectId: input.projectId as ToduUpdateIntegrationBindingInput["projectId"],
+  targetKind: input.targetKind,
+  targetRef: input.targetRef,
+  strategy: input.strategy,
+  enabled: input.enabled,
+  options: input.options,
+});
+
+const mapApprovalListFilter = (filter: ApprovalListFilter): ToduApprovalListFilter => ({
+  kind: filter.kind,
+});
+
 const mapTaskFilter = (filter: TaskFilter): Record<string, unknown> => {
   const status =
     filter.statuses && filter.statuses.length > 0
@@ -1042,8 +1198,9 @@ const mapCreateProjectInput = (input: CreateProjectInput): Record<string, unknow
   name: input.name,
   description: input.description ?? undefined,
   priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
-  authorizedAssigneeActorIds: (input as CreateProjectInput & { authorizedAssigneeActorIds?: string[] })
-    .authorizedAssigneeActorIds,
+  authorizedAssigneeActorIds: (
+    input as CreateProjectInput & { authorizedAssigneeActorIds?: string[] }
+  ).authorizedAssigneeActorIds,
 });
 
 const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, unknown> => ({

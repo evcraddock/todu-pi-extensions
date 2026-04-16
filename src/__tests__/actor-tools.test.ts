@@ -43,7 +43,9 @@ describe("registerTools", () => {
 
 describe("actor tools", () => {
   it("lists actors", async () => {
-    const actorService = { listActors: vi.fn().mockResolvedValue([createActor()]) } as unknown as ActorService;
+    const actorService = {
+      listActors: vi.fn().mockResolvedValue([createActor()]),
+    } as unknown as ActorService;
     const tool = createActorListToolDefinition({
       getActorService: vi.fn().mockResolvedValue(actorService),
     });
@@ -77,14 +79,22 @@ describe("actor tools", () => {
 
     await expect(
       createTool.execute("tool-call-1", { id: " actor-user ", displayName: " Erik " })
-    ).resolves.toMatchObject({ content: [{ text: expect.stringContaining("Created actor actor-user") }] });
+    ).resolves.toMatchObject({
+      content: [{ text: expect.stringContaining("Created actor actor-user") }],
+    });
     await expect(
       renameTool.execute("tool-call-2", { actorId: " actor-user ", displayName: " Updated Erik " })
-    ).resolves.toMatchObject({ content: [{ text: expect.stringContaining("Renamed actor actor-user") }] });
-    await expect(archiveTool.execute("tool-call-3", { actorId: " actor-user " })).resolves.toMatchObject({
+    ).resolves.toMatchObject({
+      content: [{ text: expect.stringContaining("Renamed actor actor-user") }],
+    });
+    await expect(
+      archiveTool.execute("tool-call-3", { actorId: " actor-user " })
+    ).resolves.toMatchObject({
       content: [{ text: expect.stringContaining("Archived actor actor-user") }],
     });
-    await expect(unarchiveTool.execute("tool-call-4", { actorId: " actor-user " })).resolves.toMatchObject({
+    await expect(
+      unarchiveTool.execute("tool-call-4", { actorId: " actor-user " })
+    ).resolves.toMatchObject({
       content: [{ text: expect.stringContaining("Unarchived actor actor-user") }],
     });
   });

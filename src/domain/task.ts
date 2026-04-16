@@ -1,3 +1,5 @@
+import type { ImportedContentApproval } from "./approval";
+
 export type TaskId = string;
 export type ProjectId = string;
 export type ActorId = string;
@@ -23,7 +25,16 @@ export interface TaskComment {
   authorActorId: ActorId | null;
   authorDisplayName: string;
   author: string | null;
+  contentApproval: ImportedContentApproval | null;
   createdAt: string;
+}
+
+export interface OutboundAssigneeWarning {
+  bindingId: string;
+  provider: string;
+  targetRef: string;
+  unmappedActorIds: ActorId[];
+  unmappedAssigneeDisplayNames: string[];
 }
 
 export interface TaskSummary {
@@ -41,7 +52,9 @@ export interface TaskSummary {
 
 export interface TaskDetail extends TaskSummary {
   description: string | null;
+  descriptionApproval: ImportedContentApproval | null;
   comments: TaskComment[];
+  outboundAssigneeWarnings: OutboundAssigneeWarning[];
 }
 
 export type TaskSortField = "priority" | "dueDate" | "createdAt" | "updatedAt" | "title";

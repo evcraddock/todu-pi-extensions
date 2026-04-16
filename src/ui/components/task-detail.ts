@@ -1,4 +1,5 @@
 import type { TaskDetail, TaskPriority, TaskStatus } from "../../domain/task";
+import { formatApprovalSummary } from "../../utils/approval-format";
 
 export type TaskDetailActionKind =
   | "pickup"
@@ -74,6 +75,7 @@ const createTaskDetailBody = (task: TaskDetail, recentCommentLimit: number): str
     `Priority: ${task.priority}`,
     `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
     `Assignees: ${task.assigneeDisplayNames.length > 0 ? task.assigneeDisplayNames.join(", ") : "None"}`,
+    `Description approval: ${formatApprovalSummary(task.descriptionApproval) ?? "None"}`,
     `Labels: ${task.labels.length > 0 ? task.labels.join(", ") : "None"}`,
     "",
     "Description",
@@ -82,6 +84,17 @@ const createTaskDetailBody = (task: TaskDetail, recentCommentLimit: number): str
     `Recent comments (${task.comments.length})`,
     ...formatRecentComments(task, recentCommentLimit),
   ];
+
+  if (task.outboundAssigneeWarnings.length > 0) {
+    lines.push(
+      "",
+      "Skipped unmapped outbound assignee warnings",
+      ...task.outboundAssigneeWarnings.map(
+        (warning) =>
+          `- ${warning.provider}:${warning.targetRef} (${warning.bindingId}) • ${warning.unmappedAssigneeDisplayNames.join(", ")}`
+      )
+    );
+  }
 
   return lines.join("\n");
 };
@@ -97,7 +110,10 @@ const formatRecentComments = (task: TaskDetail, recentCommentLimit: number): str
       .split("\n")
       .map((line) => (line.trim().length > 0 ? `  ${line}` : "  "));
 
-    return [`- ${comment.authorDisplayName} · ${comment.createdAt}`, ...contentLines];
+    return [
+      `- ${comment.authorDisplayName} · ${comment.createdAt}${formatApprovalSummary(comment.contentApproval) ? ` · ${formatApprovalSummary(comment.contentApproval)}` : ""}`,
+      ...contentLines,
+    ];
   });
 };
 
