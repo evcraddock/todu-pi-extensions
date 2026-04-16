@@ -16,6 +16,8 @@ describe("createToduNoteService", () => {
       {
         id: "note-1",
         content: "Hello",
+        authorActorId: "actor-user",
+        authorDisplayName: "Erik",
         author: "user",
         entityType: null,
         entityId: null,

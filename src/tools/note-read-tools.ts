@@ -22,7 +22,8 @@ const NoteListParams = Type.Object({
     Type.String({ description: "Optional entity ID filter (task ID, project ID, or habit ID)" })
   ),
   tag: Type.Optional(Type.String({ description: "Optional tag filter" })),
-  author: Type.Optional(Type.String({ description: "Optional author filter" })),
+  author: Type.Optional(Type.String({ description: "Optional legacy author display filter" })),
+  authorActorId: Type.Optional(Type.String({ description: "Optional author actor ID filter" })),
   from: Type.Optional(Type.String({ description: "Optional created-at start date (YYYY-MM-DD)" })),
   to: Type.Optional(Type.String({ description: "Optional created-at end date (YYYY-MM-DD)" })),
   journal: Type.Optional(
@@ -36,6 +37,7 @@ interface NoteListToolParams {
   entityId?: string;
   tag?: string;
   author?: string;
+  authorActorId?: string;
   from?: string;
   to?: string;
   journal?: boolean;
@@ -159,6 +161,7 @@ const normalizeNoteListFilter = (params: NoteListToolParams): NoteFilter => ({
   entityId: normalizeOptionalText(params.entityId),
   tag: normalizeOptionalText(params.tag),
   author: normalizeOptionalText(params.author),
+  authorActorId: normalizeOptionalText(params.authorActorId),
   from: normalizeOptionalText(params.from),
   to: normalizeOptionalText(params.to),
   journal: params.journal ?? undefined,
@@ -187,7 +190,7 @@ const formatNoteListContent = (details: NoteListToolDetails): string => {
 const formatNoteSummaryLine = (note: NoteSummary): string => {
   const entityLabel = note.entityType ? `${note.entityType}:${note.entityId ?? "?"}` : "journal";
   const tagLabel = note.tags.length > 0 ? note.tags.join(", ") : "no tags";
-  return `${note.id} • ${entityLabel} • ${note.author} • ${tagLabel} • ${note.createdAt}\n    ${note.content}`;
+  return `${note.id} • ${entityLabel} • ${note.authorDisplayName} • ${tagLabel} • ${note.createdAt}\n    ${note.content}`;
 };
 
 const formatNoteShowContent = (note: NoteSummary): string => {
@@ -197,7 +200,7 @@ const formatNoteShowContent = (note: NoteSummary): string => {
   return [
     `Note ${note.id}`,
     "",
-    `Author: ${note.author}`,
+    `Author: ${note.authorDisplayName}`,
     `Entity: ${entityLabel}`,
     `Tags: ${tagLabel}`,
     `Created: ${note.createdAt}`,

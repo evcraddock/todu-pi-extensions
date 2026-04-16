@@ -15,6 +15,7 @@ import {
   normalizeUpdateTaskInput,
   resolveCreateTaskInput,
   resolveProjectForTaskCreate,
+  resolveUpdateTaskInput,
 } from "@/tools/task-mutation-tools";
 
 const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
@@ -25,6 +26,9 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   projectId: "proj-1",
   projectName: "Todu Pi Extensions",
   labels: [],
+  assigneeActorIds: ["actor-user"],
+  assigneeDisplayNames: ["Erik"],
+  assignees: ["Erik"],
   description: "Add create, update, and comment tools.",
   comments: [],
   ...overrides,
@@ -33,6 +37,8 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
 const createTaskComment = (overrides: Partial<TaskComment> = {}): TaskComment => ({
   id: "comment-1",
   taskId: "task-123",
+  authorActorId: "actor-user",
+  authorDisplayName: "Erik",
   author: "user",
   createdAt: "2026-03-19T00:00:00.000Z",
   content: "Looks good",
@@ -93,7 +99,7 @@ describe("normalizeCreateTaskInput", () => {
 describe("normalizeUpdateTaskInput", () => {
   it("requires at least one supported mutation field", () => {
     expect(() => normalizeUpdateTaskInput({ taskId: "task-123" })).toThrow(
-      "task_update requires at least one supported field: title, status, priority, or description"
+      "task_update requires at least one supported field: title, status, priority, description, or assigneeActorIds"
     );
   });
 
@@ -123,6 +129,55 @@ describe("normalizeUpdateTaskInput", () => {
       priority: undefined,
       description: null,
     });
+  });
+});
+
+describe("resolveUpdateTaskInput", () => {
+  it("supports replacing assignees directly", async () => {
+    await expect(
+      resolveUpdateTaskInput({} as TaskService, {
+        taskId: "task-123",
+        assigneeActorIds: [" actor-user ", "actor-reviewer"],
+      })
+    ).resolves.toEqual({
+      taskId: "task-123",
+      status: undefined,
+      priority: undefined,
+      assigneeActorIds: ["actor-user", "actor-reviewer"],
+    });
+  });
+
+  it("supports incremental assignee updates", async () => {
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(
+        createTaskDetail({ assigneeActorIds: ["actor-user"], assigneeDisplayNames: ["Erik"] })
+      ),
+    } as unknown as TaskService;
+
+    await expect(
+      resolveUpdateTaskInput(taskService, {
+        taskId: "task-123",
+        addAssigneeActorIds: ["actor-reviewer", "actor-user"],
+        removeAssigneeActorIds: ["actor-user"],
+      })
+    ).resolves.toEqual({
+      taskId: "task-123",
+      status: undefined,
+      priority: undefined,
+      assigneeActorIds: ["actor-reviewer"],
+    });
+  });
+
+  it("rejects mixing direct and incremental assignee updates", async () => {
+    await expect(
+      resolveUpdateTaskInput({} as TaskService, {
+        taskId: "task-123",
+        assigneeActorIds: ["actor-user"],
+        addAssigneeActorIds: ["actor-reviewer"],
+      })
+    ).rejects.toThrow(
+      "task_update cannot combine assigneeActorIds with addAssigneeActorIds or removeAssigneeActorIds"
+    );
   });
 });
 
@@ -395,7 +450,7 @@ describe("createTaskUpdateToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", { taskId: "task-123" })).rejects.toThrow(
-      "task_update failed: task_update requires at least one supported field: title, status, priority, or description"
+      "task_update failed: task_update requires at least one supported field: title, status, priority, description, or assigneeActorIds"
     );
   });
 

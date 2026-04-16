@@ -18,6 +18,8 @@ import {
 const createNoteSummary = (overrides: Partial<NoteSummary> = {}): NoteSummary => ({
   id: "note-1",
   content: "This is a test note.",
+  authorActorId: "actor-user",
+  authorDisplayName: "Erik",
   author: "user",
   entityType: "task",
   entityId: "task-123",
@@ -47,6 +49,7 @@ describe("normalizeNoteListFilter", () => {
         entityId: "   ",
         tag: "   ",
         author: "   ",
+        authorActorId: "   ",
         from: "   ",
         to: "   ",
       })
@@ -55,6 +58,7 @@ describe("normalizeNoteListFilter", () => {
       entityId: undefined,
       tag: undefined,
       author: undefined,
+      authorActorId: undefined,
       from: undefined,
       to: undefined,
       journal: undefined,
@@ -69,6 +73,7 @@ describe("normalizeNoteListFilter", () => {
         entityId: "task-123",
         tag: "review",
         author: "user",
+        authorActorId: "actor-user",
         from: "2026-01-01",
         to: "2026-03-31",
         journal: true,
@@ -79,6 +84,7 @@ describe("normalizeNoteListFilter", () => {
       entityId: "task-123",
       tag: "review",
       author: "user",
+      authorActorId: "actor-user",
       from: "2026-01-01",
       to: "2026-03-31",
       journal: true,
@@ -108,6 +114,7 @@ describe("createNoteListToolDefinition", () => {
       entityId: "task-123",
       tag: "review",
       author: undefined,
+      authorActorId: undefined,
       from: undefined,
       to: undefined,
       journal: undefined,
@@ -123,6 +130,7 @@ describe("createNoteListToolDefinition", () => {
         entityId: "task-123",
         tag: "review",
         author: undefined,
+        authorActorId: undefined,
         from: undefined,
         to: undefined,
         journal: undefined,
@@ -152,6 +160,7 @@ describe("createNoteListToolDefinition", () => {
         entityId: undefined,
         tag: undefined,
         author: undefined,
+        authorActorId: undefined,
         from: undefined,
         to: undefined,
         journal: undefined,
@@ -205,7 +214,7 @@ describe("createNoteShowToolDefinition", () => {
 
     expect(noteService.getNote).toHaveBeenCalledWith("note-1");
     expect(result.content[0]?.text).toContain("Note note-1");
-    expect(result.content[0]?.text).toContain("user");
+    expect(result.content[0]?.text).toContain("Erik");
     expect(result.content[0]?.text).toContain("review");
     expect(result.content[0]?.text).toContain("task:task-123");
     expect(result.content[0]?.text).toContain("This is a test note.");
@@ -254,7 +263,7 @@ describe("formatNoteShowContent", () => {
     const content = formatNoteShowContent(createNoteSummary());
 
     expect(content).toContain("Note note-1");
-    expect(content).toContain("Author: user");
+    expect(content).toContain("Author: Erik");
     expect(content).toContain("Entity: task:task-123");
     expect(content).toContain("Tags: review");
     expect(content).toContain("This is a test note.");

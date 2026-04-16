@@ -16,6 +16,9 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   projectId: overrides.projectId ?? "proj-1",
   projectName: overrides.projectName ?? "Todu Pi Extensions",
   labels: overrides.labels ?? ["ui"],
+  assigneeActorIds: overrides.assigneeActorIds ?? ["actor-user"],
+  assigneeDisplayNames: overrides.assigneeDisplayNames ?? ["Erik"],
+  assignees: overrides.assignees ?? ["Erik"],
   description: overrides.description ?? "Persist and restore current task context",
   comments: overrides.comments ?? [],
 });
@@ -69,7 +72,7 @@ describe("createCurrentTaskContextController", () => {
     );
     expect(ctx.ui.setWidget).toHaveBeenCalledWith(CURRENT_TASK_WIDGET_KEY, [
       task.title,
-      "active • high • Todu Pi Extensions",
+      "active • high • Todu Pi Extensions • assignees: Erik",
     ]);
     expect(appendEntry).not.toHaveBeenCalled();
     expect(controller.getState()).toEqual({ currentTaskId: task.id, currentTask: task });
@@ -101,7 +104,7 @@ describe("createCurrentTaskContextController", () => {
     );
     expect(ctx.ui.setWidget).toHaveBeenCalledWith(CURRENT_TASK_WIDGET_KEY, [
       task.title,
-      "active • high • Todu Pi Extensions",
+      "active • high • Todu Pi Extensions • assignees: Erik",
     ]);
 
     await controller.clearCurrentTask(ctx as never);
@@ -141,7 +144,7 @@ describe("createCurrentTaskContextController", () => {
     });
     expect(ctx.ui.setWidget).toHaveBeenLastCalledWith(CURRENT_TASK_WIDGET_KEY, [
       refreshedTask.title,
-      "active • medium • Todu Pi Extensions",
+      "active • medium • Todu Pi Extensions • assignees: Erik",
     ]);
   });
 

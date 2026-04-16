@@ -73,6 +73,7 @@ const createTaskDetailBody = (task: TaskDetail, recentCommentLimit: number): str
     `Status: ${formatTaskStatusLabel(task.status)}`,
     `Priority: ${task.priority}`,
     `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
+    `Assignees: ${task.assigneeDisplayNames.length > 0 ? task.assigneeDisplayNames.join(", ") : "None"}`,
     `Labels: ${task.labels.length > 0 ? task.labels.join(", ") : "None"}`,
     "",
     "Description",
@@ -96,7 +97,7 @@ const formatRecentComments = (task: TaskDetail, recentCommentLimit: number): str
       .split("\n")
       .map((line) => (line.trim().length > 0 ? `  ${line}` : "  "));
 
-    return [`- ${comment.author} · ${comment.createdAt}`, ...contentLines];
+    return [`- ${comment.authorDisplayName} · ${comment.createdAt}`, ...contentLines];
   });
 };
 

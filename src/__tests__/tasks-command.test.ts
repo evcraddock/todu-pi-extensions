@@ -26,6 +26,9 @@ const createTaskSummary = (): TaskSummary => ({
   projectId: "proj-1",
   projectName: "Todu Pi Extensions",
   labels: ["ui"],
+  assigneeActorIds: ["actor-user"],
+  assigneeDisplayNames: ["Erik"],
+  assignees: ["Erik"],
 });
 
 const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
@@ -871,6 +874,8 @@ describe("openTaskDetailHub", () => {
           id: "comment-1",
           taskId: task.id,
           content: "Looks good",
+          authorActorId: "actor-user",
+          authorDisplayName: "Erik",
           author: "user",
           createdAt: "2026-03-19T00:00:00.000Z",
         },

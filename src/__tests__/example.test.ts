@@ -12,12 +12,15 @@ describe("task list UI scaffolding", () => {
       projectId: "proj-1",
       projectName: "Foundation",
       labels: ["foundation"],
+      assigneeActorIds: ["actor-user"],
+      assigneeDisplayNames: ["Erik"],
+      assignees: ["Erik"],
     });
 
     expect(item).toEqual({
       value: "task-123",
       label: "Implement module layout",
-      description: "active • high • Foundation",
+      description: "active • high • Foundation • assignees: Erik",
     });
   });
 });

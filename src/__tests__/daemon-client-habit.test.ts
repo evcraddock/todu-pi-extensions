@@ -346,6 +346,8 @@ describe("createToduDaemonClient habit support", () => {
     expect(note).toEqual({
       id: "note-1",
       content: "Session done",
+      authorActorId: null,
+      authorDisplayName: "user",
       author: "user",
       entityType: "habit",
       entityId: "habit-1",
