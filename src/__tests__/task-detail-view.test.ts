@@ -14,12 +14,17 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
   projectId: "proj-1",
   projectName: "Todu Pi Extensions",
   labels: ["ui", "detail"],
+  assigneeActorIds: ["actor-user", "actor-reviewer"],
+  assigneeDisplayNames: ["Erik", "Reviewer"],
+  assignees: ["Erik", "Reviewer"],
   description: "Show metadata, description, and comments inside pi.",
   comments: [
     {
       id: "comment-1",
       taskId: "task-123",
       content: "First note",
+      authorActorId: "actor-user",
+      authorDisplayName: "Erik",
       author: "user",
       createdAt: "2026-03-19T00:00:00.000Z",
     },
@@ -27,6 +32,8 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
       id: "comment-2",
       taskId: "task-123",
       content: "Second note",
+      authorActorId: "actor-user",
+      authorDisplayName: "Erik",
       author: "user",
       createdAt: "2026-03-19T01:00:00.000Z",
     },
@@ -44,6 +51,7 @@ describe("task detail view model", () => {
     expect(viewModel.body).toContain("Status: Active");
     expect(viewModel.body).toContain("Priority: high");
     expect(viewModel.body).toContain("Project: Todu Pi Extensions");
+    expect(viewModel.body).toContain("Assignees: Erik, Reviewer");
     expect(viewModel.body).toContain("Labels: ui, detail");
     expect(viewModel.body).toContain("Description");
     expect(viewModel.body).toContain("Show metadata, description, and comments inside pi.");

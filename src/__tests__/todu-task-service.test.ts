@@ -16,6 +16,9 @@ describe("createToduTaskService", () => {
       projectId: "proj-1",
       projectName: null,
       labels: ["foundation"],
+      assigneeActorIds: ["actor-user"],
+      assigneeDisplayNames: ["Erik"],
+      assignees: ["Erik"],
     };
     const project: ProjectSummary = {
       id: "proj-1",
@@ -56,6 +59,7 @@ describe("createToduTaskService", () => {
       addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
+      listActors: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -79,6 +83,9 @@ describe("createToduTaskService", () => {
       projectId: "proj-1",
       projectName: null,
       labels: ["foundation"],
+      assigneeActorIds: ["actor-user"],
+      assigneeDisplayNames: ["Erik"],
+      assignees: ["Erik"],
       description: "Create the initial module layout",
       comments: [],
     };
@@ -120,6 +127,7 @@ describe("createToduTaskService", () => {
       addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
+      listActors: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -136,6 +144,7 @@ describe("createToduTaskService", () => {
         "Status: Active",
         "Priority: high",
         "Project: Foundation",
+        "Assignees: Erik",
         "Labels: foundation",
         "",
         "Description",
@@ -187,6 +196,7 @@ describe("createToduTaskService", () => {
       addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
+      listActors: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -210,6 +220,9 @@ describe("createToduTaskService", () => {
       projectId: "proj-1",
       projectName: null,
       labels: ["foundation"],
+      assigneeActorIds: ["actor-user"],
+      assigneeDisplayNames: ["Erik"],
+      assignees: ["Erik"],
     };
     const project: ProjectSummary = {
       id: "proj-1",
@@ -259,6 +272,7 @@ describe("createToduTaskService", () => {
       addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
+      listActors: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -291,6 +305,9 @@ describe("createToduTaskService", () => {
       projectId: "proj-1",
       projectName: null,
       labels: ["foundation"],
+      assigneeActorIds: ["actor-user"],
+      assigneeDisplayNames: ["Erik"],
+      assignees: ["Erik"],
       description: "Create the initial module layout",
       comments: [],
     };
@@ -342,6 +359,7 @@ describe("createToduTaskService", () => {
       addHabitNote: vi.fn().mockResolvedValue({}),
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
+      listActors: vi.fn().mockResolvedValue([]),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -403,6 +421,9 @@ describe("createToduTaskService", () => {
       projectId: "proj-2",
       projectName: null,
       labels: [],
+      assigneeActorIds: ["actor-reviewer"],
+      assigneeDisplayNames: ["Reviewer"],
+      assignees: ["Reviewer"],
       description: null,
       comments: [],
     };

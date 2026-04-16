@@ -5,7 +5,9 @@ export type NoteEntityType = "task" | "project" | "habit";
 export interface NoteSummary {
   id: NoteId;
   content: string;
-  author: string;
+  authorActorId: string | null;
+  authorDisplayName: string;
+  author: string | null;
   entityType: NoteEntityType | null;
   entityId: string | null;
   tags: string[];
@@ -17,6 +19,7 @@ export interface NoteFilter {
   entityId?: string;
   tag?: string;
   author?: string;
+  authorActorId?: string;
   from?: string;
   to?: string;
   journal?: boolean;

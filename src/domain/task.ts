@@ -1,5 +1,6 @@
 export type TaskId = string;
 export type ProjectId = string;
+export type ActorId = string;
 export type TaskCommentId = string;
 
 export type TaskStatus = "active" | "inprogress" | "waiting" | "done" | "cancelled";
@@ -18,7 +19,9 @@ export interface TaskComment {
   id: TaskCommentId;
   taskId: TaskId;
   content: string;
-  author: string;
+  authorActorId: ActorId | null;
+  authorDisplayName: string;
+  author: string | null;
   createdAt: string;
 }
 
@@ -30,6 +33,9 @@ export interface TaskSummary {
   projectId: ProjectId | null;
   projectName: string | null;
   labels: string[];
+  assigneeActorIds: ActorId[];
+  assigneeDisplayNames: string[];
+  assignees: string[];
 }
 
 export interface TaskDetail extends TaskSummary {

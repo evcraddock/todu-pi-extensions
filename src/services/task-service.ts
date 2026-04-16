@@ -22,6 +22,7 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   priority?: TaskPriority;
   description?: string | null;
+  assigneeActorIds?: string[];
 }
 
 export interface AddTaskCommentInput {

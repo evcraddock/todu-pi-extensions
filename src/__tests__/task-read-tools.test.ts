@@ -21,6 +21,9 @@ const createTaskSummary = (overrides: Partial<TaskSummary> = {}): TaskSummary =>
   projectId: "proj-1",
   projectName: "Todu Pi Extensions",
   labels: ["tools"],
+  assigneeActorIds: ["actor-user", "actor-reviewer"],
+  assigneeDisplayNames: ["Erik", "Reviewer"],
+  assignees: ["Erik", "Reviewer"],
   ...overrides,
 });
 
@@ -31,6 +34,8 @@ const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
     {
       id: "comment-1",
       taskId: "task-123",
+      authorActorId: "actor-user",
+      authorDisplayName: "Erik",
       author: "user",
       createdAt: "2026-03-19T00:00:00.000Z",
       content: "Looks good",
@@ -150,6 +155,7 @@ describe("createTaskListToolDefinition", () => {
     expect(result.content[0]?.type).toBe("text");
     expect(result.content[0]?.text).toContain("Tasks (1):");
     expect(result.content[0]?.text).toContain("task-123");
+    expect(result.content[0]?.text).toContain("assignees: Erik, Reviewer");
     expect(result.details).toEqual({
       kind: "task_list",
       filter: {
@@ -258,6 +264,7 @@ describe("createTaskShowToolDefinition", () => {
     expect(taskService.getTask).toHaveBeenCalledWith(task.id);
     expect(result.content[0]?.text).toContain(`Task ${task.id}: ${task.title}`);
     expect(result.content[0]?.text).toContain("Description:");
+    expect(result.content[0]?.text).toContain("Assignees: Erik, Reviewer");
     expect(result.content[0]?.text).toContain("Recent comments (1):");
     expect(result.details).toEqual({
       kind: "task_show",

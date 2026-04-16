@@ -29,6 +29,7 @@ import type {
   RecurringTemplateDetail,
   RecurringTemplateSummary,
 } from "../../domain/recurring";
+import type { ActorSummary } from "../../domain/actor";
 import type {
   ProjectSummary,
   TaskComment,
@@ -115,6 +116,7 @@ export interface ToduProjectSummary {
 export interface ToduDaemonClient {
   listTasks(filter?: TaskFilter): Promise<TaskSummary[]>;
   getTask(taskId: TaskId): Promise<TaskDetail | null>;
+  listActors(): Promise<ActorSummary[]>;
   createTask(input: CreateTaskInput): Promise<TaskDetail>;
   updateTask(input: UpdateTaskInput): Promise<TaskDetail>;
   addTaskComment(input: AddTaskCommentInput): Promise<TaskComment>;
@@ -153,16 +155,30 @@ export interface CreateToduDaemonClientOptions {
   connection: Pick<ToduDaemonConnection, "request" | "subscribeToEvents">;
 }
 
+type ToduActorLike = {
+  id: string;
+  displayName: string;
+  archived?: boolean;
+};
+
+type ToduTaskWithActorFields = ToduTask & { assigneeActorIds?: string[] };
+type ToduTaskWithDetailWithActorFields = ToduTaskWithDetail & { assigneeActorIds?: string[] };
+type ToduNoteWithActorFields = ToduNote & { authorActorId?: string };
+type ToduNoteFilterWithActorFields = ToduNoteFilter & { authorActorId?: string };
+
 const createToduDaemonClient = ({
   connection,
 }: CreateToduDaemonClientOptions): ToduDaemonClient => ({
   async listTasks(filter = {}): Promise<TaskSummary[]> {
     const tasks = await listRawTasks(connection, filter);
-    return tasks.map(mapTaskSummary);
+    const actorMap = hasActorBackedTaskAssignments(tasks)
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return tasks.map((task) => mapTaskSummary(task, actorMap));
   },
 
   async getTask(taskId: TaskId): Promise<TaskDetail | null> {
-    const taskResult = await connection.request<ToduTaskWithDetail>("task.get", { id: taskId });
+    const taskResult = await connection.request<ToduTaskWithDetailWithActorFields>("task.get", { id: taskId });
     if (!taskResult.ok) {
       if (taskResult.error.code === "NOT_FOUND") {
         return null;
@@ -172,22 +188,28 @@ const createToduDaemonClient = ({
     }
 
     const comments = await fetchTaskComments(connection, taskId);
-    return mapTaskDetail(taskResult.value, comments);
+    const actorMap = shouldLoadTaskActors(taskResult.value, comments)
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return mapTaskDetail(taskResult.value, comments, actorMap);
   },
 
   async createTask(input: CreateTaskInput): Promise<TaskDetail> {
-    const taskResult = await connection.request<ToduTaskWithDetail>("task.create", {
+    const taskResult = await connection.request<ToduTaskWithDetailWithActorFields>("task.create", {
       input: mapCreateTaskInput(input),
     });
     if (!taskResult.ok) {
       throw mapDaemonErrorToClientError("task.create", taskResult.error);
     }
 
-    return mapTaskDetail(taskResult.value, []);
+    const actorMap = hasActorBackedTaskAssignments([taskResult.value])
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return mapTaskDetail(taskResult.value, [], actorMap);
   },
 
   async updateTask(input: UpdateTaskInput): Promise<TaskDetail> {
-    const taskResult = await connection.request<ToduTaskWithDetail>("task.update", {
+    const taskResult = await connection.request<ToduTaskWithDetailWithActorFields>("task.update", {
       id: input.taskId,
       input: mapUpdateTaskInput(input),
     });
@@ -196,11 +218,14 @@ const createToduDaemonClient = ({
     }
 
     const comments = await fetchTaskComments(connection, input.taskId);
-    return mapTaskDetail(taskResult.value, comments);
+    const actorMap = shouldLoadTaskActors(taskResult.value, comments)
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return mapTaskDetail(taskResult.value, comments, actorMap);
   },
 
   async addTaskComment(input: AddTaskCommentInput): Promise<TaskComment> {
-    const noteResult = await connection.request<ToduNote>("note.create", {
+    const noteResult = await connection.request<ToduNoteWithActorFields>("note.create", {
       input: {
         content: input.content,
         entityType: "task",
@@ -211,7 +236,10 @@ const createToduDaemonClient = ({
       throw mapDaemonErrorToClientError("note.create", noteResult.error);
     }
 
-    return mapTaskComment(noteResult.value);
+    const actorMap = noteResult.value.authorActorId
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return mapTaskComment(noteResult.value, actorMap);
   },
 
   async deleteTask(taskId: TaskId): Promise<DeleteTaskResult> {
@@ -227,7 +255,7 @@ const createToduDaemonClient = ({
   },
 
   async moveTask(input: MoveTaskInput): Promise<MoveTaskResult> {
-    const result = await connection.request<ToduTaskWithDetail>("task.move", {
+    const result = await connection.request<ToduTaskWithDetailWithActorFields>("task.move", {
       id: input.taskId,
       targetProjectId: input.targetProjectId,
     });
@@ -236,10 +264,17 @@ const createToduDaemonClient = ({
     }
 
     const comments = await fetchTaskComments(connection, result.value.id);
+    const actorMap = shouldLoadTaskActors(result.value, comments)
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
     return {
       sourceTaskId: input.taskId,
-      targetTask: mapTaskDetail(result.value, comments),
+      targetTask: mapTaskDetail(result.value, comments, actorMap),
     };
+  },
+
+  async listActors(): Promise<ActorSummary[]> {
+    return listActors(connection);
   },
 
   async listProjects(): Promise<ToduProjectSummary[]> {
@@ -466,7 +501,7 @@ const createToduDaemonClient = ({
   },
 
   async addHabitNote(input: AddHabitNoteInput): Promise<NoteSummary> {
-    const noteResult = await connection.request<ToduNote>("note.create", {
+    const noteResult = await connection.request<ToduNoteWithActorFields>("note.create", {
       input: {
         content: input.content,
         entityType: "habit",
@@ -477,7 +512,10 @@ const createToduDaemonClient = ({
       throw mapDaemonErrorToClientError("note.create", noteResult.error);
     }
 
-    return mapNoteSummary(noteResult.value);
+    const actorMap = noteResult.value.authorActorId
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return mapNoteSummary(noteResult.value, actorMap);
   },
 
   async deleteHabit(habitId: string): Promise<DeleteHabitResult> {
@@ -493,7 +531,7 @@ const createToduDaemonClient = ({
   },
 
   async getNote(noteId: string): Promise<NoteSummary | null> {
-    const result = await connection.request<ToduNote>("note.get", { id: noteId });
+    const result = await connection.request<ToduNoteWithActorFields>("note.get", { id: noteId });
     if (!result.ok) {
       if (result.error.code === "NOT_FOUND") {
         return null;
@@ -502,18 +540,24 @@ const createToduDaemonClient = ({
       throw mapDaemonErrorToClientError("note.get", result.error);
     }
 
-    return mapNoteSummary(result.value);
+    const actorMap = result.value.authorActorId
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return mapNoteSummary(result.value, actorMap);
   },
 
   async listNotes(filter: NoteFilter = {}): Promise<NoteSummary[]> {
-    const result = await connection.request<ToduNote[]>("note.list", {
+    const result = await connection.request<ToduNoteWithActorFields[]>("note.list", {
       filter: mapNoteFilter(filter),
     });
     if (!result.ok) {
       throw mapDaemonErrorToClientError("note.list", result.error);
     }
 
-    return result.value.map(mapNoteSummary);
+    const actorMap = result.value.some((note) => note.authorActorId)
+      ? buildActorMap(await listActors(connection))
+      : new Map<string, ActorSummary>();
+    return result.value.map((note) => mapNoteSummary(note, actorMap));
   },
 
   async listTaskComments(taskId: TaskId): Promise<TaskComment[]> {
@@ -535,11 +579,11 @@ const createToduDaemonClient = ({
 const listRawTasks = async (
   connection: Pick<ToduDaemonConnection, "request">,
   filter: TaskFilter
-): Promise<ToduTask[]> => {
-  let tasks: ToduTask[];
+): Promise<ToduTaskWithActorFields[]> => {
+  let tasks: ToduTaskWithActorFields[];
 
   if (filter.query && filter.query.trim().length > 0) {
-    const result = await connection.request<ToduTask[]>("task.search", {
+    const result = await connection.request<ToduTaskWithActorFields[]>("task.search", {
       query: filter.query,
     });
     if (!result.ok) {
@@ -548,7 +592,7 @@ const listRawTasks = async (
 
     tasks = result.value.filter((task) => matchesTaskFilter(task, filter));
   } else {
-    const result = await connection.request<ToduTask[]>("task.list", {
+    const result = await connection.request<ToduTaskWithActorFields[]>("task.list", {
       filter: mapTaskFilter(filter),
     });
     if (!result.ok) {
@@ -565,7 +609,11 @@ const listRawTasks = async (
   return tasks;
 };
 
-const sortTasks = (tasks: ToduTask[], field: string, direction: "asc" | "desc"): ToduTask[] => {
+const sortTasks = (
+  tasks: ToduTaskWithActorFields[],
+  field: string,
+  direction: "asc" | "desc"
+): ToduTaskWithActorFields[] => {
   const sorted = [...tasks].sort((a, b) => {
     const aVal = getTaskSortValue(a, field);
     const bVal = getTaskSortValue(b, field);
@@ -595,24 +643,83 @@ const getTaskSortValue = (task: ToduTask, field: string): string | number => {
   }
 };
 
+const listActors = async (
+  connection: Pick<ToduDaemonConnection, "request">
+): Promise<ActorSummary[]> => {
+  const result = await connection.request<ToduActorLike[]>("actor.list", {});
+  if (!result.ok) {
+    throw mapDaemonErrorToClientError("actor.list", result.error);
+  }
+
+  return result.value.map((actor) => ({
+    id: actor.id,
+    displayName: actor.displayName,
+    archived: actor.archived ?? false,
+  }));
+};
+
+const buildActorMap = (actors: ActorSummary[]): Map<string, ActorSummary> =>
+  new Map(actors.map((actor) => [actor.id, actor]));
+
+const resolveActorDisplayName = (
+  actorId: string | undefined,
+  actorMap: Map<string, ActorSummary>,
+  fallback?: string | null
+): string => {
+  if (!actorId) {
+    return fallback?.trim() || "Unknown";
+  }
+
+  return actorMap.get(actorId)?.displayName ?? fallback?.trim() ?? actorId;
+};
+
+const resolveActorDisplayNames = (
+  actorIds: readonly string[],
+  actorMap: Map<string, ActorSummary>,
+  fallbackNames: readonly string[] = []
+): string[] => {
+  if (actorIds.length > 0) {
+    return actorIds.map((actorId) => resolveActorDisplayName(actorId, actorMap));
+  }
+
+  return fallbackNames.filter((name) => name.trim().length > 0);
+};
+
+const hasActorBackedTaskAssignments = (
+  tasks: ReadonlyArray<{ assigneeActorIds?: string[] }>
+): boolean =>
+  tasks.some((task) => (task.assigneeActorIds ?? []).length > 0);
+
+const shouldLoadTaskActors = (
+  task: { assigneeActorIds?: string[] },
+  comments: ReadonlyArray<{ authorActorId?: string | null }>
+): boolean =>
+  (task.assigneeActorIds ?? []).length > 0 || comments.some((comment) => comment.authorActorId);
+
 const fetchTaskComments = async (
   connection: Pick<ToduDaemonConnection, "request">,
   taskId: TaskId
 ): Promise<TaskComment[]> => {
-  const result = await connection.request<ToduNote[]>("note.list", {
+  const notes = await connection.request<ToduNoteWithActorFields[]>("note.list", {
     filter: {
       entityType: "task",
       entityId: taskId,
     },
   });
-  if (!result.ok) {
-    throw mapDaemonErrorToClientError("note.list", result.error);
+  if (!notes.ok) {
+    throw mapDaemonErrorToClientError("note.list", notes.error);
   }
 
-  return result.value.map(mapTaskComment);
+  const actorMap = notes.value.some((note) => note.authorActorId)
+    ? buildActorMap(await listActors(connection))
+    : new Map<string, ActorSummary>();
+  return notes.value.map((note) => mapTaskComment(note, actorMap));
 };
 
-const mapTaskSummary = (task: ToduTask): TaskSummary => ({
+const mapTaskSummary = (
+  task: ToduTaskWithActorFields,
+  actorMap: Map<string, ActorSummary>
+): TaskSummary => ({
   id: task.id,
   title: task.title,
   status: toLocalTaskStatus(task.status),
@@ -620,37 +727,59 @@ const mapTaskSummary = (task: ToduTask): TaskSummary => ({
   projectId: task.projectId ?? null,
   projectName: null,
   labels: [...task.labels],
+  assigneeActorIds: [...(task.assigneeActorIds ?? [])],
+  assigneeDisplayNames: resolveActorDisplayNames(
+    task.assigneeActorIds ?? [],
+    actorMap,
+    task.assignees ?? []
+  ),
+  assignees: [...(task.assignees ?? [])],
 });
 
-const mapTaskDetail = (task: ToduTaskWithDetail, comments: TaskComment[]): TaskDetail => ({
-  ...mapTaskSummary(task),
+const mapTaskDetail = (
+  task: ToduTaskWithDetailWithActorFields,
+  comments: TaskComment[],
+  actorMap: Map<string, ActorSummary>
+): TaskDetail => ({
+  ...mapTaskSummary(task, actorMap),
   description: task.description ?? null,
   comments,
 });
 
-const mapTaskComment = (note: ToduNote): TaskComment => ({
+const mapTaskComment = (
+  note: ToduNoteWithActorFields,
+  actorMap: Map<string, ActorSummary>
+): TaskComment => ({
   id: note.id,
   taskId: note.entityId ?? "",
   content: note.content,
-  author: note.author,
+  authorActorId: note.authorActorId ?? null,
+  authorDisplayName: resolveActorDisplayName(note.authorActorId, actorMap, note.author),
+  author: note.author ?? null,
   createdAt: note.createdAt,
 });
 
-const mapNoteSummary = (note: ToduNote): NoteSummary => ({
+const mapNoteSummary = (
+  note: ToduNoteWithActorFields,
+  actorMap: Map<string, ActorSummary>
+): NoteSummary => ({
   id: note.id,
   content: note.content,
-  author: note.author,
+  authorActorId: note.authorActorId ?? null,
+  authorDisplayName: resolveActorDisplayName(note.authorActorId, actorMap, note.author),
+  author: note.author ?? null,
   entityType: (note.entityType as NoteEntityType) ?? null,
   entityId: note.entityId ?? null,
   tags: [...note.tags],
   createdAt: note.createdAt,
 });
 
-const mapNoteFilter = (filter: NoteFilter): ToduNoteFilter => ({
+const mapNoteFilter = (filter: NoteFilter): ToduNoteFilterWithActorFields => ({
   entityType: filter.entityType,
   entityId: filter.entityId,
   tag: filter.tag,
   author: filter.author,
+  authorActorId: filter.authorActorId,
   createdFrom: filter.from,
   createdTo: filter.to,
   journal: filter.journal,
@@ -866,6 +995,7 @@ const mapUpdateTaskInput = (input: UpdateTaskInput): Record<string, unknown> => 
   status: input.status ? toRemoteTaskStatus(input.status) : undefined,
   priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
   description: input.description ?? undefined,
+  assigneeActorIds: input.assigneeActorIds,
 });
 
 const matchesTaskFilter = (task: ToduTask, filter: TaskFilter): boolean => {

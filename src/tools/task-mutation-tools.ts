@@ -46,6 +46,21 @@ const TaskUpdateParams = Type.Object({
       description: "Optional replacement description. Use an empty string to clear it.",
     })
   ),
+  assigneeActorIds: Type.Optional(
+    Type.Array(Type.String({ description: "Actor ID" }), {
+      description: "Optional full replacement assignee actor ID list",
+    })
+  ),
+  addAssigneeActorIds: Type.Optional(
+    Type.Array(Type.String({ description: "Actor ID" }), {
+      description: "Optional actor IDs to add to the current assignee list",
+    })
+  ),
+  removeAssigneeActorIds: Type.Optional(
+    Type.Array(Type.String({ description: "Actor ID" }), {
+      description: "Optional actor IDs to remove from the current assignee list",
+    })
+  ),
 });
 
 const TaskCommentCreateParams = Type.Object({
@@ -74,6 +89,9 @@ interface TaskUpdateToolParams {
   status?: TaskStatus;
   priority?: TaskPriority;
   description?: string;
+  assigneeActorIds?: string[];
+  addAssigneeActorIds?: string[];
+  removeAssigneeActorIds?: string[];
 }
 
 interface TaskCommentCreateToolParams {
@@ -164,17 +182,19 @@ const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDepe
 const createTaskUpdateToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
   name: "task_update",
   label: "Task Update",
-  description: "Update a task's title, status, priority, or description.",
-  promptSnippet: "Update a task's supported metadata fields by task ID.",
+  description: "Update a task's title, status, priority, description, or assignees.",
+  promptSnippet: "Update a task's supported metadata and assignee fields by task ID.",
   promptGuidelines: [
     "Use this tool for backend task updates in normal chat.",
-    "Supported fields are title, status, priority, and description.",
+    "Supported fields are title, status, priority, description, and actor-based assignee updates.",
+    "Use assigneeActorIds to replace the full assignee list.",
+    "Use addAssigneeActorIds or removeAssigneeActorIds for incremental multi-actor assignment changes.",
   ],
   parameters: TaskUpdateParams,
   async execute(_toolCallId: string, params: TaskUpdateToolParams) {
     try {
-      const input = normalizeUpdateTaskInput(params);
       const taskService = await getTaskService();
+      const input = await resolveUpdateTaskInput(taskService, params);
       const task = await updateTask({ taskService }, input);
       const details: TaskUpdateToolDetails = {
         kind: "task_update",
@@ -403,24 +423,106 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     input.description = normalizeNullableText(params.description);
   }
 
+  if (hasOwn(params, "assigneeActorIds")) {
+    input.assigneeActorIds = normalizeActorIdList(params.assigneeActorIds, "assigneeActorIds");
+  }
+
   if (
     input.title === undefined &&
     input.status === undefined &&
     input.priority === undefined &&
-    !hasOwn(input, "description")
+    !hasOwn(input, "description") &&
+    !hasOwn(input, "assigneeActorIds")
   ) {
     throw new Error(
-      "task_update requires at least one supported field: title, status, priority, or description"
+      "task_update requires at least one supported field: title, status, priority, description, or assigneeActorIds"
     );
   }
 
   return input;
 };
 
+const resolveUpdateTaskInput = async (
+  taskService: TaskService,
+  params: TaskUpdateToolParams
+): Promise<UpdateTaskInput> => {
+  if (params.assigneeActorIds !== undefined) {
+    if (params.addAssigneeActorIds !== undefined || params.removeAssigneeActorIds !== undefined) {
+      throw new Error(
+        "task_update cannot combine assigneeActorIds with addAssigneeActorIds or removeAssigneeActorIds"
+      );
+    }
+
+    return normalizeUpdateTaskInput(params);
+  }
+
+  const addAssigneeActorIds = hasOwn(params, "addAssigneeActorIds")
+    ? normalizeActorIdList(params.addAssigneeActorIds, "addAssigneeActorIds")
+    : undefined;
+  const removeAssigneeActorIds = hasOwn(params, "removeAssigneeActorIds")
+    ? normalizeActorIdList(params.removeAssigneeActorIds, "removeAssigneeActorIds")
+    : undefined;
+
+  const hasIncrementalAssigneeUpdate =
+    addAssigneeActorIds !== undefined || removeAssigneeActorIds !== undefined;
+
+  const baseInput: UpdateTaskInput = {
+    taskId: normalizeRequiredText(params.taskId, "taskId") as TaskId,
+    status: params.status,
+    priority: params.priority,
+  };
+
+  if (hasOwn(params, "title")) {
+    baseInput.title = normalizeRequiredText(params.title ?? "", "title");
+  }
+
+  if (hasOwn(params, "description")) {
+    baseInput.description = normalizeNullableText(params.description);
+  }
+
+  if (!hasIncrementalAssigneeUpdate) {
+    return normalizeUpdateTaskInput(params);
+  }
+
+  const task = await taskService.getTask(baseInput.taskId);
+  if (!task) {
+    throw new Error(`task not found: ${baseInput.taskId}`);
+  }
+
+  const nextAssigneeActorIds = new Set(task.assigneeActorIds);
+  for (const actorId of addAssigneeActorIds ?? []) {
+    nextAssigneeActorIds.add(actorId);
+  }
+  for (const actorId of removeAssigneeActorIds ?? []) {
+    nextAssigneeActorIds.delete(actorId);
+  }
+
+  return {
+    ...baseInput,
+    assigneeActorIds: [...nextAssigneeActorIds],
+  };
+};
+
 const normalizeTaskCommentInput = (params: TaskCommentCreateToolParams): AddTaskCommentInput => ({
   taskId: normalizeRequiredText(params.taskId, "taskId") as TaskId,
   content: normalizeRequiredText(params.content, "content"),
 });
+
+const normalizeActorIdList = (
+  values: string[] | undefined,
+  fieldName: string
+): string[] => {
+  if (values === undefined) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  const normalizedValues = values.map((value, index) => {
+    const normalizedValue = normalizeRequiredText(value ?? "", `${fieldName}[${index}]`);
+    return normalizedValue;
+  });
+
+  return [...new Set(normalizedValues)];
+};
 
 const normalizeRequiredText = (value: string, fieldName: string): string => {
   const trimmedValue = value.trim();
@@ -465,6 +567,9 @@ const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): stri
     input.priority !== undefined ? `priority=${input.priority}` : null,
     hasOwn(input, "description")
       ? `description=${input.description === null ? "cleared" : "updated"}`
+      : null,
+    hasOwn(input, "assigneeActorIds")
+      ? `assigneeActorIds=${JSON.stringify(input.assigneeActorIds ?? [])}`
       : null,
   ].filter((value): value is string => value !== null);
 
@@ -522,6 +627,7 @@ export {
   normalizeTaskCommentInput,
   normalizeUpdateTaskInput,
   registerTaskMutationTools,
+  resolveUpdateTaskInput,
   resolveCreateTaskInput,
   resolveProjectForTaskCreate,
 };

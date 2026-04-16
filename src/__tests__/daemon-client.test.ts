@@ -45,6 +45,9 @@ describe("createToduDaemonClient", () => {
         projectId: "proj-1",
         projectName: null,
         labels: ["daemon"],
+        assigneeActorIds: [],
+        assigneeDisplayNames: [],
+        assignees: [],
       },
     ]);
     expect(connection.request).toHaveBeenCalledWith("task.list", {
@@ -206,12 +209,17 @@ describe("createToduDaemonClient", () => {
       projectId: "proj-1",
       projectName: null,
       labels: ["daemon"],
+      assigneeActorIds: [],
+      assigneeDisplayNames: [],
+      assignees: [],
       description: "Implement the typed client wrapper",
       comments: [
         {
           id: "note-1",
           taskId: "task-1",
           content: "First note",
+          authorActorId: null,
+          authorDisplayName: "user",
           author: "user",
           createdAt: "2026-03-19T01:00:00.000Z",
         },
@@ -348,6 +356,8 @@ describe("createToduDaemonClient", () => {
       id: "note-1",
       taskId: "task-1",
       content: "Looks good",
+      authorActorId: null,
+      authorDisplayName: "user",
       author: "user",
       createdAt: "2026-03-19T02:00:00.000Z",
     });
@@ -843,6 +853,8 @@ describe("createToduDaemonClient", () => {
       {
         id: "note-1",
         content: "Journal entry",
+        authorActorId: null,
+        authorDisplayName: "user",
         author: "user",
         entityType: null,
         entityId: null,
@@ -856,6 +868,7 @@ describe("createToduDaemonClient", () => {
         entityId: undefined,
         tag: "daily",
         author: undefined,
+        authorActorId: undefined,
         createdFrom: "2026-03-01",
         createdTo: "2026-03-31",
         journal: true,

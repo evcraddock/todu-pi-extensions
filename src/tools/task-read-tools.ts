@@ -232,7 +232,9 @@ const formatTaskListContent = (details: TaskListToolDetails): string => {
 
 const formatTaskSummaryLine = (task: TaskSummary): string => {
   const projectLabel = task.projectName ?? task.projectId ?? "no project";
-  return `${task.id} • ${task.title} • ${task.status} • ${task.priority} • ${projectLabel}`;
+  const assigneeLabel =
+    task.assigneeDisplayNames.length > 0 ? task.assigneeDisplayNames.join(", ") : "none";
+  return `${task.id} • ${task.title} • ${task.status} • ${task.priority} • ${projectLabel} • assignees: ${assigneeLabel}`;
 };
 
 const formatTaskShowContent = (task: TaskDetail): string => {
@@ -242,6 +244,7 @@ const formatTaskShowContent = (task: TaskDetail): string => {
     `Status: ${task.status}`,
     `Priority: ${task.priority}`,
     `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
+    `Assignees: ${task.assigneeDisplayNames.length > 0 ? task.assigneeDisplayNames.join(", ") : "none"}`,
     `Labels: ${task.labels.length > 0 ? task.labels.join(", ") : "none"}`,
     "",
     "Description:",
@@ -256,7 +259,7 @@ const formatTaskShowContent = (task: TaskDetail): string => {
   }
 
   for (const comment of task.comments) {
-    lines.push(`- [${comment.createdAt}] ${comment.author}`);
+    lines.push(`- [${comment.createdAt}] ${comment.authorDisplayName}`);
     lines.push(...indentLines(comment.content || "(empty)", 2));
     lines.push("");
   }
