@@ -13,6 +13,7 @@ import type {
 import { commentOnTask } from "../flows/comment-on-task";
 import { createTask } from "../flows/create-task";
 import { updateTask } from "../flows/update-task";
+import type { ActorService } from "../services/actor-service";
 import type {
   AddTaskCommentInput,
   CreateTaskInput,
@@ -21,6 +22,7 @@ import type {
   TaskService,
   UpdateTaskInput,
 } from "../services/task-service";
+import type { ProjectService } from "../services/project-service";
 import { ToduTaskServiceError } from "../services/todu/todu-task-service";
 
 const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelled"] as const;
@@ -144,6 +146,8 @@ interface TaskMoveToolDetails {
 
 interface TaskMutationToolDependencies {
   getTaskService: () => Promise<TaskService>;
+  getActorService?: () => Promise<ActorService>;
+  getProjectService?: () => Promise<ProjectService>;
 }
 
 const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
@@ -179,7 +183,11 @@ const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDepe
   },
 });
 
-const createTaskUpdateToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
+const createTaskUpdateToolDefinition = ({
+  getTaskService,
+  getActorService,
+  getProjectService,
+}: TaskMutationToolDependencies) => ({
   name: "task_update",
   label: "Task Update",
   description: "Update a task's title, status, priority, description, or assignees.",
@@ -194,7 +202,12 @@ const createTaskUpdateToolDefinition = ({ getTaskService }: TaskMutationToolDepe
   async execute(_toolCallId: string, params: TaskUpdateToolParams) {
     try {
       const taskService = await getTaskService();
-      const input = await resolveUpdateTaskInput(taskService, params);
+      const actorService = await getActorService?.();
+      const projectService = await getProjectService?.();
+      const input = await resolveUpdateTaskInput(taskService, params, {
+        actorService,
+        projectService,
+      });
       const task = await updateTask({ taskService }, input);
       const details: TaskUpdateToolDetails = {
         kind: "task_update",
@@ -442,9 +455,15 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
   return input;
 };
 
+interface ResolveUpdateTaskInputDependencies {
+  actorService?: ActorService;
+  projectService?: ProjectService;
+}
+
 const resolveUpdateTaskInput = async (
   taskService: TaskService,
-  params: TaskUpdateToolParams
+  params: TaskUpdateToolParams,
+  dependencies: ResolveUpdateTaskInputDependencies = {}
 ): Promise<UpdateTaskInput> => {
   if (params.assigneeActorIds !== undefined) {
     if (params.addAssigneeActorIds !== undefined || params.removeAssigneeActorIds !== undefined) {
@@ -453,7 +472,8 @@ const resolveUpdateTaskInput = async (
       );
     }
 
-    return normalizeUpdateTaskInput(params);
+    const input = normalizeUpdateTaskInput(params);
+    return validateNextAssigneeActorIds(taskService, input, dependencies);
   }
 
   const addAssigneeActorIds = hasOwn(params, "addAssigneeActorIds")
@@ -481,7 +501,8 @@ const resolveUpdateTaskInput = async (
   }
 
   if (!hasIncrementalAssigneeUpdate) {
-    return normalizeUpdateTaskInput(params);
+    const input = normalizeUpdateTaskInput(params);
+    return validateNextAssigneeActorIds(taskService, input, dependencies);
   }
 
   const task = await taskService.getTask(baseInput.taskId);
@@ -497,10 +518,60 @@ const resolveUpdateTaskInput = async (
     nextAssigneeActorIds.delete(actorId);
   }
 
-  return {
-    ...baseInput,
-    assigneeActorIds: [...nextAssigneeActorIds],
-  };
+  return validateNextAssigneeActorIds(
+    taskService,
+    {
+      ...baseInput,
+      assigneeActorIds: [...nextAssigneeActorIds],
+    },
+    dependencies,
+  );
+};
+
+const validateNextAssigneeActorIds = async (
+  taskService: TaskService,
+  input: UpdateTaskInput,
+  dependencies: ResolveUpdateTaskInputDependencies
+): Promise<UpdateTaskInput> => {
+  if (input.assigneeActorIds === undefined) {
+    return input;
+  }
+
+  if (!dependencies.actorService || !dependencies.projectService) {
+    return input;
+  }
+
+  const task = await taskService.getTask(input.taskId);
+  if (!task) {
+    throw new Error(`task not found: ${input.taskId}`);
+  }
+
+  const project = task.projectId ? await dependencies.projectService.getProject(task.projectId) : null;
+  if (!project) {
+    return input;
+  }
+
+  const currentAssignees = new Set(task.assigneeActorIds);
+  const actors = await dependencies.actorService.listActors();
+  const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
+  const authorizedActorIds = new Set(project.authorizedAssigneeActorIds);
+
+  for (const actorId of input.assigneeActorIds) {
+    const actor = actorMap.get(actorId);
+    if (!actor) {
+      throw new Error(`actor not found: ${actorId}`);
+    }
+
+    if (!currentAssignees.has(actorId) && actor.archived) {
+      throw new Error(`actor is archived and unavailable for new assignment: ${actorId}`);
+    }
+
+    if (!currentAssignees.has(actorId) && !authorizedActorIds.has(actorId)) {
+      throw new Error(`actor is not authorized for project ${project.id}: ${actorId}`);
+    }
+  }
+
+  return input;
 };
 
 const normalizeTaskCommentInput = (params: TaskCommentCreateToolParams): AddTaskCommentInput => ({

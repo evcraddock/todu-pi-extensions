@@ -18,6 +18,7 @@ const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectS
   status: "active",
   priority: "medium",
   description: "Primary project",
+  authorizedAssigneeActorIds: [],
   ...overrides,
 });
 
@@ -67,6 +68,31 @@ describe("formatProjectShowContent", () => {
     expect(formatProjectShowContent(createProjectSummary())).toContain(
       "Project proj-1: Todu Pi Extensions"
     );
+  });
+
+  it("shows authorized actors and stale unauthorized assignees", () => {
+    const content = formatProjectShowContent(
+      createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] }),
+      [{ id: "actor-user", displayName: "Erik", archived: false }],
+      [
+        {
+          id: "task-1",
+          title: "Follow up",
+          status: "active",
+          priority: "medium",
+          projectId: "proj-1",
+          projectName: "Todu Pi Extensions",
+          labels: [],
+          assigneeActorIds: ["actor-user", "actor-reviewer"],
+          assigneeDisplayNames: ["Erik", "Reviewer (unauthorized)"],
+          assignees: ["Erik", "Reviewer"],
+        },
+      ]
+    );
+
+    expect(content).toContain("Authorized assignees: Erik");
+    expect(content).toContain("Stale unauthorized assignees:");
+    expect(content).toContain("task-1 • Follow up • Erik, Reviewer (unauthorized)");
   });
 });
 

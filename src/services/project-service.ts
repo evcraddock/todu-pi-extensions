@@ -5,6 +5,7 @@ export interface CreateProjectInput {
   name: string;
   description?: string | null;
   priority?: TaskPriority;
+  authorizedAssigneeActorIds?: string[];
 }
 
 export interface UpdateProjectInput {
@@ -13,6 +14,7 @@ export interface UpdateProjectInput {
   description?: string | null;
   status?: ProjectSummary["status"];
   priority?: TaskPriority;
+  authorizedAssigneeActorIds?: string[];
 }
 
 export interface DeleteProjectResult {

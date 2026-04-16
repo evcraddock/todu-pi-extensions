@@ -26,6 +26,7 @@ describe("createToduTaskService", () => {
       status: "active",
       priority: "high",
       description: null,
+      authorizedAssigneeActorIds: ["actor-user"],
     };
     const filter: TaskFilter = { statuses: ["active"] };
     const client = {
@@ -60,6 +61,10 @@ describe("createToduTaskService", () => {
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
       listActors: vi.fn().mockResolvedValue([]),
+      createActor: vi.fn(),
+      renameActor: vi.fn(),
+      archiveActor: vi.fn(),
+      unarchiveActor: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -95,6 +100,7 @@ describe("createToduTaskService", () => {
       status: "active",
       priority: "high",
       description: null,
+      authorizedAssigneeActorIds: ["actor-user"],
     };
     const client = {
       listTasks: vi.fn(),
@@ -128,6 +134,10 @@ describe("createToduTaskService", () => {
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
       listActors: vi.fn().mockResolvedValue([]),
+      createActor: vi.fn(),
+      renameActor: vi.fn(),
+      archiveActor: vi.fn(),
+      unarchiveActor: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -197,6 +207,10 @@ describe("createToduTaskService", () => {
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
       listActors: vi.fn().mockResolvedValue([]),
+      createActor: vi.fn(),
+      renameActor: vi.fn(),
+      archiveActor: vi.fn(),
+      unarchiveActor: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -230,6 +244,7 @@ describe("createToduTaskService", () => {
       status: "active",
       priority: "high",
       description: null,
+      authorizedAssigneeActorIds: ["actor-user"],
     };
     const client = {
       listTasks: vi.fn().mockResolvedValue([taskSummary]),
@@ -273,6 +288,10 @@ describe("createToduTaskService", () => {
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
       listActors: vi.fn().mockResolvedValue([]),
+      createActor: vi.fn(),
+      renameActor: vi.fn(),
+      archiveActor: vi.fn(),
+      unarchiveActor: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });
@@ -317,6 +336,7 @@ describe("createToduTaskService", () => {
       status: "active",
       priority: "high",
       description: null,
+      authorizedAssigneeActorIds: ["actor-user"],
     };
     const client = {
       listTasks: vi.fn(),
@@ -360,6 +380,10 @@ describe("createToduTaskService", () => {
       listNotes: vi.fn().mockResolvedValue([]),
       getNote: vi.fn().mockResolvedValue(null),
       listActors: vi.fn().mockResolvedValue([]),
+      createActor: vi.fn(),
+      renameActor: vi.fn(),
+      archiveActor: vi.fn(),
+      unarchiveActor: vi.fn(),
       on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
     };
     const taskService = createToduTaskService({ client });

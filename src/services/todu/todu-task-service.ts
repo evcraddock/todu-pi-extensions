@@ -68,31 +68,80 @@ const listTasksWithProjectNames = async (
   client: ToduDaemonClient,
   filter?: TaskFilter
 ): Promise<TaskSummary[]> => {
-  const [tasks, projects] = await Promise.all([client.listTasks(filter), client.listProjects()]);
-  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const [tasks, projects, actors] = await Promise.all([
+    client.listTasks(filter),
+    client.listProjects(),
+    listActorsBestEffort(client),
+  ]);
+  const projectMap = new Map(projects.map((project) => [project.id, project]));
+  const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
 
-  return tasks.map((task) => ({
-    ...task,
-    projectName: task.projectId ? (projectNames.get(task.projectId) ?? null) : null,
-  }));
+  return tasks.map((task) => hydrateTaskSummaryMetadata(task, projectMap.get(task.projectId ?? "") ?? null, actorMap));
 };
 
 const hydrateTaskDetailProjectName = async (
   client: ToduDaemonClient,
   task: TaskDetail
 ): Promise<TaskDetail> => {
-  if (!task.projectId) {
-    return {
-      ...task,
-      projectName: null,
-    };
-  }
+  const [project, actors] = await Promise.all([
+    task.projectId ? client.getProject(task.projectId) : Promise.resolve(null),
+    listActorsBestEffort(client),
+  ]);
 
-  const project = await client.getProject(task.projectId);
-  return {
-    ...task,
-    projectName: project?.name ?? null,
-  };
+  return hydrateTaskDetailMetadata(
+    task,
+    project,
+    new Map(actors.map((actor) => [actor.id, actor]))
+  );
+};
+
+const listActorsBestEffort = async (client: ToduDaemonClient) => {
+  try {
+    return await client.listActors();
+  } catch {
+    return [];
+  }
+};
+
+const hydrateTaskSummaryMetadata = (
+  task: TaskSummary,
+  project: { name: string; authorizedAssigneeActorIds: string[] } | null,
+  actorMap: Map<string, { displayName: string; archived: boolean }>
+): TaskSummary => ({
+  ...task,
+  projectName: project?.name ?? null,
+  assigneeDisplayNames: annotateAssigneeDisplayNames(task, project, actorMap),
+});
+
+const hydrateTaskDetailMetadata = (
+  task: TaskDetail,
+  project: { name: string; authorizedAssigneeActorIds: string[] } | null,
+  actorMap: Map<string, { displayName: string; archived: boolean }>
+): TaskDetail => ({
+  ...task,
+  projectName: project?.name ?? null,
+  assigneeDisplayNames: annotateAssigneeDisplayNames(task, project, actorMap),
+});
+
+const annotateAssigneeDisplayNames = (
+  task: Pick<TaskSummary, "assigneeActorIds" | "assigneeDisplayNames" | "assignees">,
+  project: { authorizedAssigneeActorIds: string[] } | null,
+  actorMap: Map<string, { displayName: string; archived: boolean }>
+): string[] => {
+  const authorizedActorIds = new Set(project?.authorizedAssigneeActorIds ?? []);
+  return task.assigneeActorIds.map((actorId, index) => {
+    const actor = actorMap.get(actorId);
+    const baseLabel = task.assigneeDisplayNames[index] ?? task.assignees[index] ?? actor?.displayName ?? actorId;
+    const suffixes: string[] = [];
+    if (actor?.archived) {
+      suffixes.push("archived");
+    }
+    if (project && !authorizedActorIds.has(actorId)) {
+      suffixes.push("unauthorized");
+    }
+
+    return suffixes.length > 0 ? `${baseLabel} (${suffixes.join(", ")})` : baseLabel;
+  });
 };
 
 const runTaskServiceOperation = async <T>(

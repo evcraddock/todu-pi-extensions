@@ -1,3 +1,4 @@
+import type { ActorService } from "../actor-service";
 import type { HabitService } from "../habit-service";
 import type { NoteService } from "../note-service";
 import type { ProjectIntegrationService } from "../project-integration-service";
@@ -11,6 +12,7 @@ import {
   type CreateToduDaemonConnectionOptions,
   type ToduDaemonConnection,
 } from "./daemon-connection";
+import { createToduActorService } from "./todu-actor-service";
 import { createToduProjectIntegrationService } from "./todu-project-integration-service";
 import { createToduProjectService } from "./todu-project-service";
 import { createToduHabitService } from "./todu-habit-service";
@@ -24,12 +26,14 @@ export interface ToduTaskServiceRuntime {
   connection: ToduDaemonConnection;
   client: ToduDaemonClient;
   taskService: TaskService;
+  actorService: ActorService;
   projectService: ProjectService;
   recurringService: RecurringService;
   habitService: HabitService;
   noteService: NoteService;
   projectIntegrationService: ProjectIntegrationService;
   ensureConnected(): Promise<TaskService>;
+  ensureActorServiceConnected(): Promise<ActorService>;
   ensureProjectServiceConnected(): Promise<ProjectService>;
   ensureRecurringServiceConnected(): Promise<RecurringService>;
   ensureHabitServiceConnected(): Promise<HabitService>;
@@ -48,6 +52,7 @@ const createToduTaskServiceRuntime = (
   const connection = createToduDaemonConnection(options);
   const client = createToduDaemonClient({ connection });
   const taskService = createToduTaskService({ client });
+  const actorService = createToduActorService({ client });
   const projectService = createToduProjectService({ client });
   const recurringService = createToduRecurringService({ client });
   const habitService = createToduHabitService({ client });
@@ -66,6 +71,7 @@ const createToduTaskServiceRuntime = (
     connection,
     client,
     taskService,
+    actorService,
     projectService,
     recurringService,
     habitService,
@@ -77,6 +83,13 @@ const createToduTaskServiceRuntime = (
       }
 
       return taskService;
+    },
+    ensureActorServiceConnected: async () => {
+      if (connection.getState().status !== "connected") {
+        await connectWithinTimeout(connection, initialConnectTimeoutMs);
+      }
+
+      return actorService;
     },
     ensureProjectServiceConnected: async () => {
       if (connection.getState().status !== "connected") {

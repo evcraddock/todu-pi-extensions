@@ -111,12 +111,17 @@ export interface ToduProjectSummary {
   status: "active" | "done" | "cancelled";
   priority: TaskPriority;
   description: string | null;
+  authorizedAssigneeActorIds: string[];
 }
 
 export interface ToduDaemonClient {
   listTasks(filter?: TaskFilter): Promise<TaskSummary[]>;
   getTask(taskId: TaskId): Promise<TaskDetail | null>;
   listActors(): Promise<ActorSummary[]>;
+  createActor(input: { id: string; displayName: string }): Promise<ActorSummary>;
+  renameActor(input: { actorId: string; displayName: string }): Promise<ActorSummary>;
+  archiveActor(actorId: string): Promise<ActorSummary>;
+  unarchiveActor(actorId: string): Promise<ActorSummary>;
   createTask(input: CreateTaskInput): Promise<TaskDetail>;
   updateTask(input: UpdateTaskInput): Promise<TaskDetail>;
   addTaskComment(input: AddTaskCommentInput): Promise<TaskComment>;
@@ -161,6 +166,7 @@ type ToduActorLike = {
   archived?: boolean;
 };
 
+type ToduProjectWithActorFields = ToduProject & { authorizedAssigneeActorIds?: string[] };
 type ToduTaskWithActorFields = ToduTask & { assigneeActorIds?: string[] };
 type ToduTaskWithDetailWithActorFields = ToduTaskWithDetail & { assigneeActorIds?: string[] };
 type ToduNoteWithActorFields = ToduNote & { authorActorId?: string };
@@ -277,8 +283,47 @@ const createToduDaemonClient = ({
     return listActors(connection);
   },
 
+  async createActor(input: { id: string; displayName: string }): Promise<ActorSummary> {
+    const result = await connection.request<ToduActorLike>("actor.create", { input });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("actor.create", result.error);
+    }
+
+    return mapActorSummary(result.value);
+  },
+
+  async renameActor(input: { actorId: string; displayName: string }): Promise<ActorSummary> {
+    const result = await connection.request<ToduActorLike>("actor.rename", {
+      id: input.actorId,
+      displayName: input.displayName,
+    });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("actor.rename", result.error);
+    }
+
+    return mapActorSummary(result.value);
+  },
+
+  async archiveActor(actorId: string): Promise<ActorSummary> {
+    const result = await connection.request<ToduActorLike>("actor.archive", { id: actorId });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("actor.archive", result.error);
+    }
+
+    return mapActorSummary(result.value);
+  },
+
+  async unarchiveActor(actorId: string): Promise<ActorSummary> {
+    const result = await connection.request<ToduActorLike>("actor.unarchive", { id: actorId });
+    if (!result.ok) {
+      throw mapDaemonErrorToClientError("actor.unarchive", result.error);
+    }
+
+    return mapActorSummary(result.value);
+  },
+
   async listProjects(): Promise<ToduProjectSummary[]> {
-    const result = await connection.request<ToduProject[]>("project.list", {});
+    const result = await connection.request<ToduProjectWithActorFields[]>("project.list", {});
     if (!result.ok) {
       throw mapDaemonErrorToClientError("project.list", result.error);
     }
@@ -287,7 +332,7 @@ const createToduDaemonClient = ({
   },
 
   async getProject(projectId: string): Promise<ToduProjectSummary | null> {
-    const result = await connection.request<ToduProject>("project.get", { id: projectId });
+    const result = await connection.request<ToduProjectWithActorFields>("project.get", { id: projectId });
     if (!result.ok) {
       if (result.error.code === "NOT_FOUND") {
         return null;
@@ -300,7 +345,7 @@ const createToduDaemonClient = ({
   },
 
   async createProject(input: CreateProjectInput): Promise<ToduProjectSummary> {
-    const result = await connection.request<ToduProject>("project.create", {
+    const result = await connection.request<ToduProjectWithActorFields>("project.create", {
       input: mapCreateProjectInput(input),
     });
     if (!result.ok) {
@@ -311,7 +356,7 @@ const createToduDaemonClient = ({
   },
 
   async updateProject(input: UpdateLocalProjectInput): Promise<ToduProjectSummary> {
-    const result = await connection.request<ToduProject>("project.update", {
+    const result = await connection.request<ToduProjectWithActorFields>("project.update", {
       id: input.projectId,
       input: mapUpdateProjectInput(input),
     });
@@ -643,6 +688,12 @@ const getTaskSortValue = (task: ToduTask, field: string): string | number => {
   }
 };
 
+const mapActorSummary = (actor: ToduActorLike): ActorSummary => ({
+  id: actor.id,
+  displayName: actor.displayName,
+  archived: actor.archived ?? false,
+});
+
 const listActors = async (
   connection: Pick<ToduDaemonConnection, "request">
 ): Promise<ActorSummary[]> => {
@@ -651,11 +702,7 @@ const listActors = async (
     throw mapDaemonErrorToClientError("actor.list", result.error);
   }
 
-  return result.value.map((actor) => ({
-    id: actor.id,
-    displayName: actor.displayName,
-    archived: actor.archived ?? false,
-  }));
+  return result.value.map(mapActorSummary);
 };
 
 const listActorsBestEffort = async (
@@ -798,12 +845,13 @@ const mapNoteFilter = (filter: NoteFilter): ToduNoteFilterWithActorFields => ({
   timezone: filter.timezone,
 });
 
-const mapProjectSummary = (project: ToduProject): ToduProjectSummary => ({
+const mapProjectSummary = (project: ToduProjectWithActorFields): ToduProjectSummary => ({
   id: project.id,
   name: project.name,
   status: toLocalProjectStatus(project.status),
   priority: toLocalTaskPriority(project.priority),
   description: project.description ?? null,
+  authorizedAssigneeActorIds: [...(project.authorizedAssigneeActorIds ?? [])],
 });
 
 const mapIntegrationBinding = (binding: ToduIntegrationBinding): IntegrationBinding => ({
@@ -906,18 +954,6 @@ const mapHabitFilter = (filter: HabitFilter): ToduHabitFilter => ({
   search: filter.query,
 });
 
-const mapCreateProjectInput = (input: CreateProjectInput): Record<string, unknown> => ({
-  name: input.name,
-  description: input.description ?? undefined,
-  priority: input.priority ?? undefined,
-});
-
-const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, unknown> => ({
-  name: input.name ?? undefined,
-  description: input.description ?? undefined,
-  status: input.status ? toRemoteProjectStatus(input.status) : undefined,
-  priority: input.priority ?? undefined,
-});
 
 const mapCreateRecurringInput = (input: CreateRecurringInput): Record<string, unknown> => ({
   title: input.title,
@@ -1000,6 +1036,22 @@ const mapCreateTaskInput = (input: CreateTaskInput): Record<string, unknown> => 
   description: input.description ?? undefined,
   projectId: input.projectId ?? undefined,
   labels: input.labels,
+});
+
+const mapCreateProjectInput = (input: CreateProjectInput): Record<string, unknown> => ({
+  name: input.name,
+  description: input.description ?? undefined,
+  priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
+  authorizedAssigneeActorIds: (input as CreateProjectInput & { authorizedAssigneeActorIds?: string[] })
+    .authorizedAssigneeActorIds,
+});
+
+const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, unknown> => ({
+  name: input.name ?? undefined,
+  description: input.description ?? undefined,
+  status: input.status ? toRemoteProjectStatus(input.status) : undefined,
+  priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
+  authorizedAssigneeActorIds: input.authorizedAssigneeActorIds,
 });
 
 const mapUpdateTaskInput = (input: UpdateTaskInput): Record<string, unknown> => ({

@@ -56,6 +56,7 @@ describe("createToduRecurringService", () => {
       getProject: vi.fn().mockResolvedValue({
         id: "proj-1",
         name: "Todu Pi Extensions",
+        authorizedAssigneeActorIds: [],
         status: "active",
         priority: "medium",
         description: null,

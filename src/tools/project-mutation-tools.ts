@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
 import type { ProjectSummary, TaskPriority } from "../domain/task";
+import type { ActorService } from "../services/actor-service";
 import type {
   CreateProjectInput,
   DeleteProjectResult,
@@ -36,6 +37,21 @@ const ProjectUpdateParams = Type.Object({
   priority: Type.Optional(
     StringEnum(PROJECT_PRIORITY_VALUES, { description: "Optional next project priority" })
   ),
+  authorizedAssigneeActorIds: Type.Optional(
+    Type.Array(Type.String({ description: "Actor ID" }), {
+      description: "Optional full replacement authorized assignee actor ID list",
+    })
+  ),
+  addAuthorizedAssigneeActorIds: Type.Optional(
+    Type.Array(Type.String({ description: "Actor ID" }), {
+      description: "Optional actor IDs to add to the authorized assignee list",
+    })
+  ),
+  removeAuthorizedAssigneeActorIds: Type.Optional(
+    Type.Array(Type.String({ description: "Actor ID" }), {
+      description: "Optional actor IDs to remove from the authorized assignee list",
+    })
+  ),
 });
 
 const ProjectDeleteParams = Type.Object({
@@ -54,6 +70,9 @@ interface ProjectUpdateToolParams {
   description?: string;
   status?: ProjectSummary["status"];
   priority?: TaskPriority;
+  authorizedAssigneeActorIds?: string[];
+  addAuthorizedAssigneeActorIds?: string[];
+  removeAuthorizedAssigneeActorIds?: string[];
 }
 
 interface ProjectDeleteToolParams {
@@ -82,6 +101,7 @@ interface ProjectDeleteToolDetails {
 
 interface ProjectMutationToolDependencies {
   getProjectService: () => Promise<ProjectService>;
+  getActorService?: () => Promise<ActorService>;
 }
 
 const createProjectCreateToolDefinition = ({
@@ -119,6 +139,7 @@ const createProjectCreateToolDefinition = ({
 
 const createProjectUpdateToolDefinition = ({
   getProjectService,
+  getActorService,
 }: ProjectMutationToolDependencies) => ({
   name: "project_update",
   label: "Project Update",
@@ -126,14 +147,15 @@ const createProjectUpdateToolDefinition = ({
   promptSnippet: "Update a plain project record by explicit project ID.",
   promptGuidelines: [
     "Use this tool for plain project-record updates in normal chat.",
-    "Supported fields are name, description, status, and priority.",
+    "Supported fields are name, description, status, priority, and authorized assignee actor IDs.",
     "Do not use it for repo inspection or integration-binding changes.",
   ],
   parameters: ProjectUpdateParams,
   async execute(_toolCallId: string, params: ProjectUpdateToolParams) {
     try {
-      const input = normalizeUpdateProjectInput(params);
       const projectService = await getProjectService();
+      const actorService = await getActorService?.();
+      const input = await resolveUpdateProjectInput(projectService, params, actorService);
       const project = await projectService.updateProject(input);
       const details: ProjectUpdateToolDetails = {
         kind: "project_update",
@@ -231,18 +253,89 @@ const normalizeUpdateProjectInput = (params: ProjectUpdateToolParams): UpdatePro
     input.description = normalizeNullableText(params.description);
   }
 
+  if (hasOwn(params, "authorizedAssigneeActorIds")) {
+    input.authorizedAssigneeActorIds = normalizeActorIdList(
+      params.authorizedAssigneeActorIds,
+      "authorizedAssigneeActorIds"
+    );
+  }
+
   if (
     input.name === undefined &&
     input.status === undefined &&
     input.priority === undefined &&
-    !hasOwn(input, "description")
+    !hasOwn(input, "description") &&
+    !hasOwn(input, "authorizedAssigneeActorIds")
   ) {
     throw new Error(
-      "project_update requires at least one supported field: name, description, status, or priority"
+      "project_update requires at least one supported field: name, description, status, priority, or authorizedAssigneeActorIds"
     );
   }
 
   return input;
+};
+
+const resolveUpdateProjectInput = async (
+  projectService: ProjectService,
+  params: ProjectUpdateToolParams,
+  actorService?: ActorService
+): Promise<UpdateProjectInput> => {
+  if (params.authorizedAssigneeActorIds !== undefined) {
+    if (
+      params.addAuthorizedAssigneeActorIds !== undefined ||
+      params.removeAuthorizedAssigneeActorIds !== undefined
+    ) {
+      throw new Error(
+        "project_update cannot combine authorizedAssigneeActorIds with addAuthorizedAssigneeActorIds or removeAuthorizedAssigneeActorIds"
+      );
+    }
+
+    const input = normalizeUpdateProjectInput(params);
+    return validateAuthorizedActorIds(input, actorService);
+  }
+
+  const addAuthorizedActorIds = hasOwn(params, "addAuthorizedAssigneeActorIds")
+    ? normalizeActorIdList(params.addAuthorizedAssigneeActorIds, "addAuthorizedAssigneeActorIds")
+    : undefined;
+  const removeAuthorizedActorIds = hasOwn(params, "removeAuthorizedAssigneeActorIds")
+    ? normalizeActorIdList(
+        params.removeAuthorizedAssigneeActorIds,
+        "removeAuthorizedAssigneeActorIds"
+      )
+    : undefined;
+  const hasIncrementalUpdate =
+    addAuthorizedActorIds !== undefined || removeAuthorizedActorIds !== undefined;
+
+  if (!hasIncrementalUpdate) {
+    const input = normalizeUpdateProjectInput(params);
+    return validateAuthorizedActorIds(input, actorService);
+  }
+
+  const projectId = normalizeRequiredText(params.projectId, "projectId");
+  const project = await projectService.getProject(projectId);
+  if (!project) {
+    throw new Error(`project not found: ${projectId}`);
+  }
+
+  const nextAuthorizedActorIds = new Set(project.authorizedAssigneeActorIds);
+  for (const actorId of addAuthorizedActorIds ?? []) {
+    nextAuthorizedActorIds.add(actorId);
+  }
+  for (const actorId of removeAuthorizedActorIds ?? []) {
+    nextAuthorizedActorIds.delete(actorId);
+  }
+
+  return validateAuthorizedActorIds(
+    {
+      projectId,
+      name: hasOwn(params, "name") ? normalizeRequiredText(params.name ?? "", "name") : undefined,
+      description: hasOwn(params, "description") ? normalizeNullableText(params.description) : undefined,
+      status: params.status,
+      priority: params.priority,
+      authorizedAssigneeActorIds: [...nextAuthorizedActorIds],
+    },
+    actorService
+  );
 };
 
 const normalizeOptionalDescription = <TValue extends { description?: string }>(
@@ -270,6 +363,36 @@ const normalizeNullableText = (value: string | null | undefined): string | null 
   return trimmedValue.length > 0 ? trimmedValue : null;
 };
 
+const normalizeActorIdList = (values: string[] | undefined, fieldName: string): string[] => {
+  if (values === undefined) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  return [
+    ...new Set(values.map((value, index) => normalizeRequiredText(value ?? "", `${fieldName}[${index}]`))),
+  ];
+};
+
+const validateAuthorizedActorIds = async (
+  input: UpdateProjectInput,
+  actorService?: ActorService
+): Promise<UpdateProjectInput> => {
+  if (!actorService || input.authorizedAssigneeActorIds === undefined) {
+    return input;
+  }
+
+  const actors = await actorService.listActors();
+  const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
+  for (const actorId of input.authorizedAssigneeActorIds) {
+    const actor = actorMap.get(actorId);
+    if (!actor) {
+      throw new Error(`actor not found: ${actorId}`);
+    }
+  }
+
+  return input;
+};
+
 const hasOwn = <TObject extends object>(value: TObject, property: keyof TObject): boolean =>
   Object.prototype.hasOwnProperty.call(value, property);
 
@@ -290,6 +413,9 @@ const formatProjectUpdateContent = (project: ProjectSummary, input: UpdateProjec
     input.priority !== undefined ? `priority=${input.priority}` : null,
     hasOwn(input, "description")
       ? `description=${input.description === null ? "cleared" : "updated"}`
+      : null,
+    hasOwn(input, "authorizedAssigneeActorIds")
+      ? `authorizedAssigneeActorIds=${JSON.stringify(input.authorizedAssigneeActorIds ?? [])}`
       : null,
   ].filter((value): value is string => value !== null);
 
