@@ -13,6 +13,7 @@ export interface ProjectSummary {
   status: "active" | "done" | "cancelled";
   priority: TaskPriority;
   description: string | null;
+  authorizedAssigneeActorIds: ActorId[];
 }
 
 export interface TaskComment {

@@ -51,6 +51,7 @@ const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectS
   status: "active",
   priority: "medium",
   description: "Primary project",
+  authorizedAssigneeActorIds: [],
   ...overrides,
 });
 
@@ -398,6 +399,71 @@ describe("createTaskCreateToolDefinition", () => {
 });
 
 describe("createTaskUpdateToolDefinition", () => {
+  it("rejects adding unauthorized or archived actors for new assignment", async () => {
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(createTaskDetail({ assigneeActorIds: ["actor-user"] })),
+      updateTask: vi.fn(),
+    } as unknown as TaskService;
+    const actorService = {
+      listActors: vi.fn().mockResolvedValue([
+        { id: "actor-user", displayName: "Erik", archived: false },
+        { id: "actor-archived", displayName: "Archived", archived: true },
+      ]),
+    } as never;
+    const projectService = {
+      getProject: vi.fn().mockResolvedValue(
+        createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })
+      ),
+    } as never;
+    const tool = createTaskUpdateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      getActorService: vi.fn().mockResolvedValue(actorService),
+      getProjectService: vi.fn().mockResolvedValue(projectService),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", {
+        taskId: "task-123",
+        addAssigneeActorIds: ["actor-archived"],
+      })
+    ).rejects.toThrow(
+      "task_update failed: actor is archived and unavailable for new assignment: actor-archived"
+    );
+  });
+
+  it("preserves existing stale unauthorized assignees during non-additive updates", async () => {
+    const task = createTaskDetail({ assigneeActorIds: ["actor-user", "actor-stale"] });
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(task),
+      updateTask: vi.fn().mockResolvedValue({ ...task, title: "Updated title" }),
+    } as unknown as TaskService;
+    const actorService = {
+      listActors: vi.fn().mockResolvedValue([
+        { id: "actor-user", displayName: "Erik", archived: false },
+        { id: "actor-stale", displayName: "Stale", archived: false },
+      ]),
+    } as never;
+    const projectService = {
+      getProject: vi.fn().mockResolvedValue(
+        createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })
+      ),
+    } as never;
+    const tool = createTaskUpdateToolDefinition({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      getActorService: vi.fn().mockResolvedValue(actorService),
+      getProjectService: vi.fn().mockResolvedValue(projectService),
+    });
+
+    await tool.execute("tool-call-1", {
+      taskId: "task-123",
+      title: "Updated title",
+      assigneeActorIds: ["actor-user", "actor-stale"],
+    });
+
+    expect(taskService.updateTask).toHaveBeenCalledWith(
+      expect.objectContaining({ assigneeActorIds: ["actor-user", "actor-stale"] })
+    );
+  });
   it("updates supported fields and returns structured details", async () => {
     const task = createTaskDetail({
       title: "Updated task title",

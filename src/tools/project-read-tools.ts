@@ -1,8 +1,11 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
-import type { ProjectSummary } from "../domain/task";
+import type { ActorSummary } from "../domain/actor";
+import type { ProjectSummary, TaskSummary } from "../domain/task";
+import type { ActorService } from "../services/actor-service";
 import type { ProjectService } from "../services/project-service";
+import type { TaskService } from "../services/task-service";
 
 const ProjectListParams = Type.Object({});
 const ProjectShowParams = Type.Object({
@@ -29,6 +32,8 @@ interface ProjectShowToolParams {
 
 interface ProjectReadToolDependencies {
   getProjectService: () => Promise<ProjectService>;
+  getActorService?: () => Promise<ActorService>;
+  getTaskService?: () => Promise<TaskService>;
 }
 
 const createProjectListToolDefinition = ({ getProjectService }: ProjectReadToolDependencies) => ({
@@ -62,7 +67,11 @@ const createProjectListToolDefinition = ({ getProjectService }: ProjectReadToolD
   },
 });
 
-const createProjectShowToolDefinition = ({ getProjectService }: ProjectReadToolDependencies) => ({
+const createProjectShowToolDefinition = ({
+  getProjectService,
+  getActorService,
+  getTaskService,
+}: ProjectReadToolDependencies) => ({
   name: "project_show",
   label: "Project Show",
   description: "Show project details by ID or unique name.",
@@ -99,8 +108,13 @@ const createProjectShowToolDefinition = ({ getProjectService }: ProjectReadToolD
         project,
       };
 
+      const [actors, tasks] = await Promise.all([
+        getActorService ? getActorService().then((service) => service.listActors()) : Promise.resolve([]),
+        getTaskService ? getTaskService().then((service) => service.listTasks({ projectId: project.id })) : Promise.resolve([]),
+      ]);
+
       return {
-        content: [{ type: "text" as const, text: formatProjectShowContent(project) }],
+        content: [{ type: "text" as const, text: formatProjectShowContent(project, actors, tasks) }],
         details,
       };
     } catch (error) {
@@ -153,16 +167,43 @@ const formatProjectListContent = (details: ProjectListToolDetails): string => {
   return lines.join("\n");
 };
 
-const formatProjectShowContent = (project: ProjectSummary): string =>
-  [
+const formatProjectShowContent = (
+  project: ProjectSummary,
+  actors: ActorSummary[] = [],
+  tasks: TaskSummary[] = []
+): string => {
+  const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
+  const authorizedActors =
+    project.authorizedAssigneeActorIds.length > 0
+      ? project.authorizedAssigneeActorIds.map((actorId) => {
+          const actor = actorMap.get(actorId);
+          return actor ? `${actor.displayName}${actor.archived ? " (archived)" : ""}` : actorId;
+        })
+      : ["(none)"];
+  const staleUnauthorizedTasks = tasks.filter((task) =>
+    task.assigneeActorIds.some((actorId) => !project.authorizedAssigneeActorIds.includes(actorId))
+  );
+
+  const lines = [
     `Project ${project.id}: ${project.name}`,
     "",
     `Status: ${project.status}`,
     `Priority: ${project.priority}`,
+    `Authorized assignees: ${authorizedActors.join(", ")}`,
     "",
     "Description:",
     project.description?.trim().length ? project.description : "(none)",
-  ].join("\n");
+  ];
+
+  if (staleUnauthorizedTasks.length > 0) {
+    lines.push("", "Stale unauthorized assignees:");
+    for (const task of staleUnauthorizedTasks) {
+      lines.push(`- ${task.id} • ${task.title} • ${task.assigneeDisplayNames.join(", ")}`);
+    }
+  }
+
+  return lines.join("\n");
+};
 
 const formatProjectSummaryLine = (project: ProjectSummary): string =>
   `${project.id} • ${project.name} • ${project.status} • ${project.priority}`;

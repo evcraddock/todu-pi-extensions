@@ -19,6 +19,7 @@ const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectS
   status: "active",
   priority: "medium",
   description: "Primary project",
+  authorizedAssigneeActorIds: [],
   ...overrides,
 });
 

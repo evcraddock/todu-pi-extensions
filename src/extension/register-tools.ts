@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
+import type { ActorService } from "../services/actor-service";
 import type { HabitService } from "../services/habit-service";
 import type { NoteService } from "../services/note-service";
 import type { ProjectIntegrationService } from "../services/project-integration-service";
@@ -10,6 +11,8 @@ import {
 import type { RecurringService } from "../services/recurring-service";
 import type { TaskService } from "../services/task-service";
 import { getDefaultToduTaskServiceRuntime } from "../services/todu/default-task-service";
+import { registerActorMutationTools } from "../tools/actor-mutation-tools";
+import { registerActorReadTools } from "../tools/actor-read-tools";
 import { registerHabitMutationTools } from "../tools/habit-mutation-tools";
 import { registerHabitReadTools } from "../tools/habit-read-tools";
 import { registerNoteReadTools } from "../tools/note-read-tools";
@@ -23,6 +26,7 @@ import { registerTaskReadTools } from "../tools/task-read-tools";
 
 export interface RegisterToolDependencies {
   getTaskService?: () => Promise<TaskService>;
+  getActorService?: () => Promise<ActorService>;
   getProjectService?: () => Promise<ProjectService>;
   getRecurringService?: () => Promise<RecurringService>;
   getHabitService?: () => Promise<HabitService>;
@@ -33,6 +37,8 @@ export interface RegisterToolDependencies {
 const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies = {}): void => {
   const runtime = getDefaultToduTaskServiceRuntime();
   const getTaskService = dependencies.getTaskService ?? (() => runtime.ensureConnected());
+  const getActorService =
+    dependencies.getActorService ?? (() => runtime.ensureActorServiceConnected());
   const getProjectService =
     dependencies.getProjectService ??
     (dependencies.getTaskService
@@ -49,15 +55,17 @@ const registerTools = (pi: ExtensionAPI, dependencies: RegisterToolDependencies 
     (() => runtime.ensureProjectIntegrationServiceConnected());
 
   registerTaskReadTools(pi, { getTaskService });
-  registerProjectReadTools(pi, { getProjectService });
+  registerActorReadTools(pi, { getActorService });
+  registerProjectReadTools(pi, { getProjectService, getActorService, getTaskService });
   registerProjectIntegrationTools(pi, { getProjectIntegrationService, getProjectService });
-  registerProjectMutationTools(pi, { getProjectService });
+  registerProjectMutationTools(pi, { getProjectService, getActorService });
   registerRecurringReadTools(pi, { getRecurringService });
   registerRecurringMutationTools(pi, { getRecurringService, getProjectService });
   registerHabitReadTools(pi, { getHabitService });
   registerHabitMutationTools(pi, { getHabitService, getProjectService });
   registerNoteReadTools(pi, { getNoteService });
-  registerTaskMutationTools(pi, { getTaskService });
+  registerActorMutationTools(pi, { getActorService });
+  registerTaskMutationTools(pi, { getTaskService, getActorService, getProjectService });
 };
 
 export { registerTools };

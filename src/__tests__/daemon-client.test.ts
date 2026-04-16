@@ -484,6 +484,7 @@ describe("createToduDaemonClient", () => {
       status: "active",
       priority: "high",
       description: "Created from tests",
+      authorizedAssigneeActorIds: [],
     });
     expect(connection.request).toHaveBeenCalledWith("project.create", {
       input: {
@@ -530,6 +531,7 @@ describe("createToduDaemonClient", () => {
       status: "cancelled",
       priority: "low",
       description: "Updated from tests",
+      authorizedAssigneeActorIds: [],
     });
     expect(connection.request).toHaveBeenCalledWith("project.update", {
       id: "proj-1",

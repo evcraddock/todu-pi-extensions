@@ -12,6 +12,7 @@ import {
   normalizeCreateProjectInput,
   normalizeUpdateProjectInput,
 } from "@/tools/project-mutation-tools";
+import type { ActorService } from "@/services/actor-service";
 
 const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectSummary => ({
   id: "proj-1",
@@ -19,6 +20,7 @@ const createProjectSummary = (overrides: Partial<ProjectSummary> = {}): ProjectS
   status: "active",
   priority: "medium",
   description: "Primary project",
+  authorizedAssigneeActorIds: [],
   ...overrides,
 });
 
@@ -63,7 +65,7 @@ describe("normalizeCreateProjectInput", () => {
 describe("normalizeUpdateProjectInput", () => {
   it("requires at least one supported mutation field", () => {
     expect(() => normalizeUpdateProjectInput({ projectId: "proj-1" })).toThrow(
-      "project_update requires at least one supported field: name, description, status, or priority"
+      "project_update requires at least one supported field: name, description, status, priority, or authorizedAssigneeActorIds"
     );
   });
 
@@ -142,6 +144,58 @@ describe("createProjectCreateToolDefinition", () => {
 });
 
 describe("createProjectUpdateToolDefinition", () => {
+  it("supports incremental authorized-actor updates", async () => {
+    const projectService = {
+      getProject: vi
+        .fn()
+        .mockResolvedValue(createProjectSummary({ authorizedAssigneeActorIds: ["actor-user"] })),
+      updateProject: vi.fn().mockResolvedValue(
+        createProjectSummary({ authorizedAssigneeActorIds: ["actor-user", "actor-reviewer"] })
+      ),
+    } as unknown as ProjectService;
+    const actorService = {
+      listActors: vi.fn().mockResolvedValue([
+        { id: "actor-user", displayName: "Erik", archived: false },
+        { id: "actor-reviewer", displayName: "Reviewer", archived: false },
+      ]),
+    } as unknown as ActorService;
+    const tool = createProjectUpdateToolDefinition({
+      getProjectService: vi.fn().mockResolvedValue(projectService),
+      getActorService: vi.fn().mockResolvedValue(actorService),
+    });
+
+    await tool.execute("tool-call-1", {
+      projectId: "proj-1",
+      addAuthorizedAssigneeActorIds: ["actor-reviewer"],
+    });
+
+    expect(projectService.updateProject).toHaveBeenCalledWith({
+      projectId: "proj-1",
+      status: undefined,
+      priority: undefined,
+      authorizedAssigneeActorIds: ["actor-user", "actor-reviewer"],
+    });
+  });
+
+  it("fails when authorizing an unknown actor", async () => {
+    const projectService = {
+      updateProject: vi.fn(),
+    } as unknown as ProjectService;
+    const actorService = {
+      listActors: vi.fn().mockResolvedValue([{ id: "actor-user", displayName: "Erik", archived: false }]),
+    } as unknown as ActorService;
+    const tool = createProjectUpdateToolDefinition({
+      getProjectService: vi.fn().mockResolvedValue(projectService),
+      getActorService: vi.fn().mockResolvedValue(actorService),
+    });
+
+    await expect(
+      tool.execute("tool-call-1", {
+        projectId: "proj-1",
+        authorizedAssigneeActorIds: ["actor-missing"],
+      })
+    ).rejects.toThrow("project_update failed: actor not found: actor-missing");
+  });
   it("updates supported fields and returns structured details", async () => {
     const project = createProjectSummary({
       name: "Updated Project",
@@ -194,7 +248,7 @@ describe("createProjectUpdateToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", { projectId: "proj-1" })).rejects.toThrow(
-      "project_update failed: project_update requires at least one supported field: name, description, status, or priority"
+      "project_update failed: project_update requires at least one supported field: name, description, status, priority, or authorizedAssigneeActorIds"
     );
   });
 
