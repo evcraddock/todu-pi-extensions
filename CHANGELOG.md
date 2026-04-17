@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-16
+
+This release expands the multi-user actor rollout in `@todu/pi-extensions`. It adds actor-aware task and note handling, project authorization management, and new mapping, trust, and approval surfaces for integration-backed workflows.
+
+### Added
+
+- Added actor-aware task and note flows so task assignees and note authors can be represented by actor IDs with display-name hydration. (#112)
+- Added actor management tools and project authorized-assignee management tools. (#113)
+- Added integration mapping, trust-management, approval, and warning tools and UI surfaces. (#114)
+
+### Fixed
+
+- Preserved fallback assignee display names during actor hydration. (#112)
+- Made actor display hydration best effort when actor listing is unavailable. (#112)
+- Wired actor validation into project update tools so runtime project auth updates validate actor IDs consistently. (#113)
+
+### Changed
+
+- Task and note views now surface approval metadata and binding-scoped unmapped assignee warnings where available. (#114)
+- Task assignment flows now enforce project authorization and archived-actor rules for new assignments while preserving stale historical assignments. (#113)
+
 ## [0.1.0] - 2026-04-14
 
 Initial public release of `@todu/pi-extensions`, a Pi package that brings todu-backed task, project, habit, recurring task, and note workflows into Pi with native tools, commands, and TUI integrations.
