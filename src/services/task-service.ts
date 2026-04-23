@@ -22,6 +22,7 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   priority?: TaskPriority;
   description?: string | null;
+  labels?: string[];
   assigneeActorIds?: string[];
 }
 

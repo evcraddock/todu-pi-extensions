@@ -1216,6 +1216,7 @@ const mapUpdateTaskInput = (input: UpdateTaskInput): Record<string, unknown> => 
   status: input.status ? toRemoteTaskStatus(input.status) : undefined,
   priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
   description: input.description ?? undefined,
+  labels: input.labels,
   assigneeActorIds: input.assigneeActorIds,
 });
 
