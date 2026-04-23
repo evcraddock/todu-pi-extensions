@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-23
+
+This release adds label support to the task mutation tools so agents can tag tasks during creation and update task labels without manual follow-up.
+
+### Added
+
+- Added label support to `task_create`, allowing labels to be set when creating a task. (#116)
+- Added label update support to `task_update`, including additive label changes and label removal. (#116)
+
+### Changed
+
+- Updated the task tool surface and packaged tool metadata to document label arguments for task creation and updates. (#116)
+
 ## [0.2.0] - 2026-04-16
 
 This release expands the multi-user actor rollout in `@todu/pi-extensions`. It adds actor-aware task and note handling, project authorization management, and new mapping, trust, and approval surfaces for integration-backed workflows.
