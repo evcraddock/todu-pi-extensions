@@ -82,11 +82,13 @@ describe("normalizeCreateTaskInput", () => {
         title: "  Implement mutation tools  ",
         projectId: "  proj-1  ",
         description: "   ",
+        labels: ["  Foundation  ", "foundation", "UI"],
       })
     ).toEqual({
       title: "Implement mutation tools",
       projectId: "proj-1",
       description: null,
+      labels: ["foundation", "ui"],
     });
   });
 
@@ -103,7 +105,7 @@ describe("normalizeCreateTaskInput", () => {
 describe("normalizeUpdateTaskInput", () => {
   it("requires at least one supported mutation field", () => {
     expect(() => normalizeUpdateTaskInput({ taskId: "task-123" })).toThrow(
-      "task_update requires at least one supported field: title, status, priority, description, or assigneeActorIds"
+      "task_update requires at least one supported field: title, status, priority, description, labels, or assigneeActorIds"
     );
   });
 
@@ -132,6 +134,20 @@ describe("normalizeUpdateTaskInput", () => {
       status: undefined,
       priority: undefined,
       description: null,
+    });
+  });
+
+  it("normalizes labels for additive updates", () => {
+    expect(
+      normalizeUpdateTaskInput({
+        taskId: " task-123 ",
+        labels: ["  Foundation  ", "foundation", "UI"],
+      })
+    ).toEqual({
+      taskId: "task-123",
+      status: undefined,
+      priority: undefined,
+      labels: ["foundation", "ui"],
     });
   });
 });
@@ -171,6 +187,45 @@ describe("resolveUpdateTaskInput", () => {
       status: undefined,
       priority: undefined,
       assigneeActorIds: ["actor-reviewer"],
+    });
+  });
+
+  it("adds labels to the existing label list by default", async () => {
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(createTaskDetail({ labels: ["foundation"] })),
+    } as unknown as TaskService;
+
+    await expect(
+      resolveUpdateTaskInput(taskService, {
+        taskId: "task-123",
+        labels: ["UI", "foundation"],
+      })
+    ).resolves.toEqual({
+      taskId: "task-123",
+      status: undefined,
+      priority: undefined,
+      labels: ["foundation", "ui"],
+    });
+  });
+
+  it("removes labels when removeLabels is provided", async () => {
+    const taskService = {
+      getTask: vi
+        .fn()
+        .mockResolvedValue(createTaskDetail({ labels: ["foundation", "ui", "urgent"] })),
+    } as unknown as TaskService;
+
+    await expect(
+      resolveUpdateTaskInput(taskService, {
+        taskId: "task-123",
+        labels: ["backend"],
+        removeLabels: ["ui", "missing"],
+      })
+    ).resolves.toEqual({
+      taskId: "task-123",
+      status: undefined,
+      priority: undefined,
+      labels: ["foundation", "urgent", "backend"],
     });
   });
 
@@ -296,12 +351,14 @@ describe("createTaskCreateToolDefinition", () => {
       title: "  Implement mutation tools  ",
       projectId: " proj-1 ",
       description: "  Add create, update, and comment tools.  ",
+      labels: [" Foundation ", "ui"],
     });
 
     expect(taskService.createTask).toHaveBeenCalledWith({
       title: "Implement mutation tools",
       projectId: "proj-1",
       description: "Add create, update, and comment tools.",
+      labels: ["foundation", "ui"],
     });
     expect(result.content[0]?.text).toContain(`Created task ${task.id}: ${task.title}`);
     expect(result.details).toEqual({
@@ -310,6 +367,7 @@ describe("createTaskCreateToolDefinition", () => {
         title: "Implement mutation tools",
         projectId: "proj-1",
         description: "Add create, update, and comment tools.",
+        labels: ["foundation", "ui"],
       },
       task,
     });
@@ -475,8 +533,10 @@ describe("createTaskUpdateToolDefinition", () => {
       status: "inprogress",
       priority: "medium",
       description: null,
+      labels: ["foundation", "ui"],
     });
     const taskService = {
+      getTask: vi.fn().mockResolvedValue(createTaskDetail({ labels: ["foundation"] })),
       updateTask: vi.fn().mockResolvedValue(task),
     } as unknown as TaskService;
     const tool = createTaskUpdateToolDefinition({
@@ -489,6 +549,7 @@ describe("createTaskUpdateToolDefinition", () => {
       status: "inprogress",
       priority: "medium",
       description: "   ",
+      labels: ["UI"],
     });
 
     expect(taskService.updateTask).toHaveBeenCalledWith({
@@ -497,10 +558,11 @@ describe("createTaskUpdateToolDefinition", () => {
       status: "inprogress",
       priority: "medium",
       description: null,
+      labels: ["foundation", "ui"],
     });
     expect(result.content[0]?.text).toContain(`Updated task ${task.id}: ${task.title}`);
     expect(result.content[0]?.text).toContain(
-      'Changes: title="Updated task title", status=inprogress, priority=medium, description=cleared'
+      'Changes: title="Updated task title", status=inprogress, priority=medium, description=cleared, labels=["foundation","ui"]'
     );
     expect(result.details).toEqual({
       kind: "task_update",
@@ -510,6 +572,7 @@ describe("createTaskUpdateToolDefinition", () => {
         status: "inprogress",
         priority: "medium",
         description: null,
+        labels: ["foundation", "ui"],
       },
       task,
     });
@@ -521,7 +584,7 @@ describe("createTaskUpdateToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", { taskId: "task-123" })).rejects.toThrow(
-      "task_update failed: task_update requires at least one supported field: title, status, priority, description, or assigneeActorIds"
+      "task_update failed: task_update requires at least one supported field: title, status, priority, description, labels, or assigneeActorIds"
     );
   });
 

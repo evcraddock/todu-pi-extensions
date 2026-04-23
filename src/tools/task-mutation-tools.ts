@@ -32,6 +32,11 @@ const TaskCreateParams = Type.Object({
   title: Type.String({ description: "Task title" }),
   projectId: Type.String({ description: "Project ID or unique project name for the new task" }),
   description: Type.Optional(Type.String({ description: "Optional task description" })),
+  labels: Type.Optional(
+    Type.Array(Type.String({ description: "Task label" }), {
+      description: "Optional labels to apply to the new task",
+    })
+  ),
 });
 
 const TaskUpdateParams = Type.Object({
@@ -46,6 +51,16 @@ const TaskUpdateParams = Type.Object({
   description: Type.Optional(
     Type.String({
       description: "Optional replacement description. Use an empty string to clear it.",
+    })
+  ),
+  labels: Type.Optional(
+    Type.Array(Type.String({ description: "Task label" }), {
+      description: "Optional labels to add to the existing task labels",
+    })
+  ),
+  removeLabels: Type.Optional(
+    Type.Array(Type.String({ description: "Task label" }), {
+      description: "Optional labels to remove from the existing task labels",
     })
   ),
   assigneeActorIds: Type.Optional(
@@ -83,6 +98,7 @@ interface TaskCreateToolParams {
   title: string;
   projectId: string;
   description?: string;
+  labels?: string[];
 }
 
 interface TaskUpdateToolParams {
@@ -91,6 +107,8 @@ interface TaskUpdateToolParams {
   status?: TaskStatus;
   priority?: TaskPriority;
   description?: string;
+  labels?: string[];
+  removeLabels?: string[];
   assigneeActorIds?: string[];
   addAssigneeActorIds?: string[];
   removeAssigneeActorIds?: string[];
@@ -153,12 +171,13 @@ interface TaskMutationToolDependencies {
 const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
   name: "task_create",
   label: "Task Create",
-  description: "Create a task with a title, project reference, and optional description.",
+  description: "Create a task with a title, project reference, and optional description or labels.",
   promptSnippet: "Create a task when the title and project reference are known.",
   promptGuidelines: [
     "Use this tool for backend task creation in normal chat instead of interactive slash-command flows.",
     "Provide an explicit project ID when known.",
     "If only a project name is available, pass the exact unique project name so the tool can resolve it.",
+    "Use labels to tag the task during creation when needed.",
     "Do not guess project identity.",
   ],
   parameters: TaskCreateParams,
@@ -190,11 +209,13 @@ const createTaskUpdateToolDefinition = ({
 }: TaskMutationToolDependencies) => ({
   name: "task_update",
   label: "Task Update",
-  description: "Update a task's title, status, priority, description, or assignees.",
-  promptSnippet: "Update a task's supported metadata and assignee fields by task ID.",
+  description: "Update a task's title, status, priority, description, labels, or assignees.",
+  promptSnippet: "Update a task's supported metadata, label, and assignee fields by task ID.",
   promptGuidelines: [
     "Use this tool for backend task updates in normal chat.",
-    "Supported fields are title, status, priority, description, and actor-based assignee updates.",
+    "Supported fields are title, status, priority, description, labels, and actor-based assignee updates.",
+    "Use labels to add labels to the existing task labels.",
+    "Use removeLabels when labels should be removed from the existing task labels.",
     "Use assigneeActorIds to replace the full assignee list.",
     "Use addAssigneeActorIds or removeAssigneeActorIds for incremental multi-actor assignment changes.",
   ],
@@ -376,6 +397,7 @@ const normalizeCreateTaskInput = (params: TaskCreateToolParams): CreateTaskInput
   title: normalizeRequiredText(params.title, "title"),
   projectId: normalizeRequiredText(params.projectId, "projectId"),
   description: normalizeOptionalDescription(params, "description"),
+  labels: hasOwn(params, "labels") ? normalizeLabelList(params.labels, "labels") : undefined,
 });
 
 const resolveCreateTaskInput = async (
@@ -436,6 +458,10 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     input.description = normalizeNullableText(params.description);
   }
 
+  if (hasOwn(params, "labels")) {
+    input.labels = normalizeLabelList(params.labels, "labels");
+  }
+
   if (hasOwn(params, "assigneeActorIds")) {
     input.assigneeActorIds = normalizeActorIdList(params.assigneeActorIds, "assigneeActorIds");
   }
@@ -445,10 +471,11 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     input.status === undefined &&
     input.priority === undefined &&
     !hasOwn(input, "description") &&
+    !hasOwn(input, "labels") &&
     !hasOwn(input, "assigneeActorIds")
   ) {
     throw new Error(
-      "task_update requires at least one supported field: title, status, priority, description, or assigneeActorIds"
+      "task_update requires at least one supported field: title, status, priority, description, labels, or assigneeActorIds"
     );
   }
 
@@ -482,9 +509,16 @@ const resolveUpdateTaskInput = async (
   const removeAssigneeActorIds = hasOwn(params, "removeAssigneeActorIds")
     ? normalizeActorIdList(params.removeAssigneeActorIds, "removeAssigneeActorIds")
     : undefined;
+  const addLabels = hasOwn(params, "labels")
+    ? normalizeLabelList(params.labels, "labels")
+    : undefined;
+  const removeLabels = hasOwn(params, "removeLabels")
+    ? normalizeLabelList(params.removeLabels, "removeLabels")
+    : undefined;
 
   const hasIncrementalAssigneeUpdate =
     addAssigneeActorIds !== undefined || removeAssigneeActorIds !== undefined;
+  const hasIncrementalLabelUpdate = addLabels !== undefined || removeLabels !== undefined;
 
   const baseInput: UpdateTaskInput = {
     taskId: normalizeRequiredText(params.taskId, "taskId") as TaskId,
@@ -500,7 +534,7 @@ const resolveUpdateTaskInput = async (
     baseInput.description = normalizeNullableText(params.description);
   }
 
-  if (!hasIncrementalAssigneeUpdate) {
+  if (!hasIncrementalAssigneeUpdate && !hasIncrementalLabelUpdate) {
     const input = normalizeUpdateTaskInput(params);
     return validateNextAssigneeActorIds(taskService, input, dependencies);
   }
@@ -518,11 +552,20 @@ const resolveUpdateTaskInput = async (
     nextAssigneeActorIds.delete(actorId);
   }
 
+  const nextLabels = new Set(task.labels);
+  for (const label of addLabels ?? []) {
+    nextLabels.add(label);
+  }
+  for (const label of removeLabels ?? []) {
+    nextLabels.delete(label);
+  }
+
   return validateNextAssigneeActorIds(
     taskService,
     {
       ...baseInput,
-      assigneeActorIds: [...nextAssigneeActorIds],
+      ...(hasIncrementalLabelUpdate ? { labels: [...nextLabels] } : {}),
+      ...(hasIncrementalAssigneeUpdate ? { assigneeActorIds: [...nextAssigneeActorIds] } : {}),
     },
     dependencies
   );
@@ -594,6 +637,18 @@ const normalizeActorIdList = (values: string[] | undefined, fieldName: string): 
   return [...new Set(normalizedValues)];
 };
 
+const normalizeLabelList = (values: string[] | undefined, fieldName: string): string[] => {
+  if (values === undefined) {
+    throw new Error(`${fieldName} is required`);
+  }
+
+  const normalizedValues = values.map((value, index) =>
+    normalizeRequiredText(value ?? "", `${fieldName}[${index}]`).toLowerCase()
+  );
+
+  return [...new Set(normalizedValues)];
+};
+
 const normalizeRequiredText = (value: string, fieldName: string): string => {
   const trimmedValue = value.trim();
   if (trimmedValue.length === 0) {
@@ -638,6 +693,7 @@ const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): stri
     hasOwn(input, "description")
       ? `description=${input.description === null ? "cleared" : "updated"}`
       : null,
+    hasOwn(input, "labels") ? `labels=${JSON.stringify(input.labels ?? [])}` : null,
     hasOwn(input, "assigneeActorIds")
       ? `assigneeActorIds=${JSON.stringify(input.assigneeActorIds ?? [])}`
       : null,
