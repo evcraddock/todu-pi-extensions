@@ -1,6 +1,6 @@
 {
   "name": "@todu/pi-extensions",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Task manager extensions for the pi agent harness that create UI for handling tasks.",
   "type": "module",
   "main": "./dist/index.js",

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-24
+
+Improves task tool coverage with label support and aligns note lookup behavior with the upstream daemon `note.get` RPC.
+
+### Added
+
+- Added label support to `task_create` and `task_update` tools (#116)
+
+### Fixed
+
+- Updated note lookup behavior to use the daemon `note.get` RPC for `note_show`, including direct not-found handling (#118)
+
+### Changed
+
+- Added planning documentation for habit and recurring agent tools
+
 ## [0.3.0] - 2026-04-23
 
 This release adds label support to the task mutation tools so agents can tag tasks during creation and update task labels without manual follow-up.
