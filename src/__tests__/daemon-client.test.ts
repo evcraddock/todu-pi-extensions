@@ -905,6 +905,62 @@ describe("createToduDaemonClient", () => {
     ).rejects.toThrow("task.move failed");
   });
 
+  it("gets a note by id", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: true,
+      value: {
+        id: "note-1",
+        content: "Journal entry",
+        author: "user",
+        tags: ["daily"],
+        createdAt: "2026-03-20T00:00:00.000Z",
+      },
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.getNote("note-1")).resolves.toEqual({
+      id: "note-1",
+      content: "Journal entry",
+      authorActorId: null,
+      authorDisplayName: "user",
+      author: "user",
+      contentApproval: null,
+      entityType: null,
+      entityId: null,
+      tags: ["daily"],
+      createdAt: "2026-03-20T00:00:00.000Z",
+    });
+    expect(connection.request).toHaveBeenCalledWith("note.get", { id: "note-1" });
+  });
+
+  it("returns null when note.get returns NOT_FOUND", async () => {
+    const connection = createConnectionMock();
+    connection.request.mockResolvedValue({
+      ok: false,
+      error: {
+        code: "NOT_FOUND",
+        message: "missing note",
+      },
+    });
+
+    const client = createToduDaemonClient({
+      connection: connection as unknown as Pick<
+        ToduDaemonConnection,
+        "request" | "subscribeToEvents"
+      >,
+    });
+
+    await expect(client.getNote("note-missing")).resolves.toBeNull();
+    expect(connection.request).toHaveBeenCalledWith("note.get", { id: "note-missing" });
+  });
+
   it("lists notes with filter mapped to daemon NoteFilter", async () => {
     const connection = createConnectionMock();
     connection.request.mockResolvedValue({
