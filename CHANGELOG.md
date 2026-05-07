@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-07
+
+This release fixes `/tasks` startup under the renamed Pi runtime package namespace.
+
+### Fixed
+
+- Updated Pi runtime imports and package metadata from `@mariozechner/*` to `@earendil-works/*` so `/tasks` uses the host Pi theme/runtime singleton. (#120)
+
+### Changed
+
+- Added a package smoke check and regression test to prevent old Pi runtime imports from returning. (#120)
+
 ## [0.4.0] - 2026-04-24
 
 Improves task tool coverage with label support and aligns note lookup behavior with the upstream daemon `note.get` RPC.
