@@ -40,7 +40,7 @@
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc --project tsconfig.build.json && node ./scripts/fix-dist-imports.mjs",
     "prepack": "npm run build",
-    "package:smoke": "node -e \"import('./dist/index.js')\"",
+    "package:smoke": "node ./scripts/check-pi-runtime-imports.mjs --include-dist && node -e \"import('./dist/index.js')\"",
     "package:check": "npm pack --dry-run",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -53,21 +53,21 @@
     "pre-pr": "./scripts/pre-pr.sh"
   },
   "peerDependencies": {
-    "@mariozechner/pi-ai": "*",
-    "@mariozechner/pi-coding-agent": "*",
-    "@mariozechner/pi-tui": "*",
-    "@sinclair/typebox": "*"
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@mariozechner/pi-ai": "^0.64.0",
-    "@mariozechner/pi-coding-agent": "^0.64.0",
-    "@mariozechner/pi-tui": "^0.64.0",
-    "@sinclair/typebox": "^0.34.48",
+    "@earendil-works/pi-ai": "^0.74.0",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-tui": "^0.74.0",
     "@types/node": "^25.3.5",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.3",
     "prettier": "^3.8.1",
+    "typebox": "^1.1.38",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
