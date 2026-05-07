@@ -92,18 +92,16 @@ describe("integration tools", () => {
       getIntegrationBindingStatus: vi.fn().mockResolvedValue(createStatus()),
     } as unknown as ProjectIntegrationService;
     const projectService = {
-      listProjects: vi
-        .fn()
-        .mockResolvedValue([
-          {
-            id: "proj-1",
-            name: "Todu Pi Extensions",
-            status: "active",
-            priority: "medium",
-            description: null,
-            authorizedAssigneeActorIds: [],
-          },
-        ]),
+      listProjects: vi.fn().mockResolvedValue([
+        {
+          id: "proj-1",
+          name: "Todu Pi Extensions",
+          status: "active",
+          priority: "medium",
+          description: null,
+          authorizedAssigneeActorIds: [],
+        },
+      ]),
     } as unknown as ProjectService;
     const taskService = {
       listTasks: vi.fn().mockResolvedValue([createTaskSummary()]),

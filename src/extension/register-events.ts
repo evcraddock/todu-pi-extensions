@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import {
   getDefaultCurrentTaskContextController,
@@ -21,15 +21,7 @@ const registerEvents = (pi: ExtensionAPI): void => {
     await restoreUiContext(ctx);
   });
 
-  pi.on("session_switch", async (_event, ctx) => {
-    await restoreUiContext(ctx);
-  });
-
   pi.on("session_tree", async (_event, ctx) => {
-    await restoreUiContext(ctx);
-  });
-
-  pi.on("session_fork", async (_event, ctx) => {
     await restoreUiContext(ctx);
   });
 

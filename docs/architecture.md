@@ -797,7 +797,7 @@ Mitigation: isolate daemon transport code under `services/todu/`, test reconnect
 
 ### Risk: task context drifts across branches or reloads
 
-Mitigation: persist only small, explicit session entries and reconstruct on `session_start`, `session_tree`, and `session_fork`.
+Mitigation: persist only small, explicit session entries and reconstruct on `session_start` and `session_tree`.
 
 ### Risk: task workflows overwhelm the chat UI
 
