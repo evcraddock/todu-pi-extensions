@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-05
+
+This release fixes typed task pickup so direct `pick up task-<id>` prompts update the active task UI context the same way `/tasks` pickup does.
+
+### Fixed
+
+- Selected the referenced task as the current task when a user types `pick up task-<id>` or `pickup task-<id>`, while preserving the existing `/tasks` pickup behavior. (#123)
+
 ## [0.4.1] - 2026-05-07
 
 This release fixes `/tasks` startup under the renamed Pi runtime package namespace.
