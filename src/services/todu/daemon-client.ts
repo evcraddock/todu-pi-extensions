@@ -1,10 +1,12 @@
-import type {
-  Habit as ToduHabit,
+import {
+  createActorId,
+  type Habit as ToduHabit,
   HabitFilter as ToduHabitFilter,
   HabitStreak as ToduHabitStreak,
   IntegrationBinding as ToduIntegrationBinding,
   IntegrationBindingFilter as ToduIntegrationBindingFilter,
   IntegrationBindingStatus as ToduIntegrationBindingStatus,
+  type IntegrationBindingOptions as ToduIntegrationBindingOptions,
   Note as ToduNote,
   NoteFilter as ToduNoteFilter,
   Project as ToduProject,
@@ -194,7 +196,6 @@ type ToduNoteWithActorFields = ToduNote & {
   authorActorId?: string;
   contentApproval?: ImportedContentApproval;
 };
-type ToduNoteFilterWithActorFields = ToduNoteFilter & { authorActorId?: string };
 
 const createToduDaemonClient = ({
   connection,
@@ -941,12 +942,12 @@ const mapNoteSummary = (
   createdAt: note.createdAt,
 });
 
-const mapNoteFilter = (filter: NoteFilter): ToduNoteFilterWithActorFields => ({
+const mapNoteFilter = (filter: NoteFilter): ToduNoteFilter => ({
   entityType: filter.entityType,
   entityId: filter.entityId,
   tag: filter.tag,
   author: filter.author,
-  authorActorId: filter.authorActorId,
+  authorActorId: filter.authorActorId ? createActorId(filter.authorActorId) : undefined,
   createdFrom: filter.from,
   createdTo: filter.to,
   journal: filter.journal,
@@ -1155,8 +1156,24 @@ const mapUpdateIntegrationBindingInput = (
   targetRef: input.targetRef,
   strategy: input.strategy,
   enabled: input.enabled,
-  options: input.options,
+  options: mapIntegrationBindingOptions(input.options),
 });
+
+const mapIntegrationBindingOptions = (
+  options: IntegrationBinding["options"]
+): ToduIntegrationBindingOptions | undefined => {
+  if (!options) {
+    return undefined;
+  }
+
+  return {
+    ...options,
+    actorMappings: options.actorMappings?.map((mapping) => ({
+      ...mapping,
+      actorId: createActorId(mapping.actorId),
+    })),
+  };
+};
 
 const mapApprovalListFilter = (filter: ApprovalListFilter): ToduApprovalListFilter => ({
   kind: filter.kind,

@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type { RecurringMissPolicy, RecurringTemplateDetail } from "../domain/recurring";
 import type { ProjectSummary, TaskPriority } from "../domain/task";
@@ -27,7 +28,7 @@ const RecurringCreateParams = Type.Object({
     Type.String({ description: "Optional recurring template description" })
   ),
   priority: Type.Optional(
-    StringEnum(TASK_PRIORITY_VALUES, { description: "Optional recurring template priority" })
+    stringEnum(TASK_PRIORITY_VALUES, { description: "Optional recurring template priority" })
   ),
   endDate: Type.Optional(
     Type.String({
@@ -35,7 +36,7 @@ const RecurringCreateParams = Type.Object({
     })
   ),
   missPolicy: Type.Optional(
-    StringEnum(RECURRING_MISS_POLICY_VALUES, { description: "Optional recurring miss policy" })
+    stringEnum(RECURRING_MISS_POLICY_VALUES, { description: "Optional recurring miss policy" })
   ),
 });
 
@@ -60,7 +61,7 @@ const RecurringUpdateParams = Type.Object({
     })
   ),
   priority: Type.Optional(
-    StringEnum(TASK_PRIORITY_VALUES, {
+    stringEnum(TASK_PRIORITY_VALUES, {
       description: "Optional replacement recurring template priority",
     })
   ),
@@ -68,7 +69,7 @@ const RecurringUpdateParams = Type.Object({
     Type.String({ description: "Optional replacement end date. Use an empty string to clear it." })
   ),
   missPolicy: Type.Optional(
-    StringEnum(RECURRING_MISS_POLICY_VALUES, {
+    stringEnum(RECURRING_MISS_POLICY_VALUES, {
       description: "Optional replacement recurring miss policy",
     })
   ),

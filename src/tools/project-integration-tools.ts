@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type { ProjectSummary, TaskPriority } from "../domain/task";
 import type {
@@ -34,7 +35,7 @@ const ProjectRegisterParams = Type.Object({
   ),
   description: Type.Optional(Type.String({ description: "Optional project description" })),
   priority: Type.Optional(
-    StringEnum(PROJECT_PRIORITY_VALUES, { description: "Optional project priority" })
+    stringEnum(PROJECT_PRIORITY_VALUES, { description: "Optional project priority" })
   ),
 });
 

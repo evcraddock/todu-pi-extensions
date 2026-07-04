@@ -2,11 +2,7 @@ import type { TaskDetail, TaskPriority, TaskStatus } from "../../domain/task";
 import { formatApprovalSummary } from "../../utils/approval-format";
 
 export type TaskDetailActionKind =
-  | "pickup"
-  | "set-current"
-  | "update-status"
-  | "update-priority"
-  | "comment";
+  "pickup" | "set-current" | "update-status" | "update-priority" | "comment";
 
 export interface TaskDetailActionItem {
   value: TaskDetailActionKind;

@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type { NoteEntityType, NoteFilter, NoteSummary } from "../domain/note";
 import type { NoteService } from "../services/note-service";
@@ -15,7 +16,7 @@ const NoteShowParams = Type.Object({
 
 const NoteListParams = Type.Object({
   entityType: Type.Optional(
-    StringEnum(NOTE_ENTITY_TYPE_VALUES, {
+    stringEnum(NOTE_ENTITY_TYPE_VALUES, {
       description: "Optional entity type filter (task, project, habit)",
     })
   ),
