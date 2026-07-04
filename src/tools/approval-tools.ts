@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type { ApprovalItem, ApprovalItemKind, ApprovalListFilter } from "../domain/approval";
 import type { ActorService } from "../services/actor-service";
@@ -10,7 +11,7 @@ const APPROVAL_KIND_VALUES = ["taskDescription", "noteContent"] as const;
 
 const ApprovalListParams = Type.Object({
   kind: Type.Optional(
-    StringEnum(APPROVAL_KIND_VALUES, { description: "Optional approval item kind filter" })
+    stringEnum(APPROVAL_KIND_VALUES, { description: "Optional approval item kind filter" })
   ),
 });
 

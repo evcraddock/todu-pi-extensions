@@ -25,8 +25,7 @@ export interface ToduDaemonConnectionError {
 }
 
 export type ToduDaemonConnectionResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: ToduDaemonConnectionError };
+  { ok: true; value: T } | { ok: false; error: ToduDaemonConnectionError };
 
 export interface ToduDaemonHelloResult {
   protocolVersion: string;
@@ -42,10 +41,7 @@ export interface ToduDaemonHelloResult {
 }
 
 export type ToduDaemonConnectionStatus =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "reconnecting";
+  "disconnected" | "connecting" | "connected" | "reconnecting";
 
 export interface ToduDaemonConnectionState {
   status: ToduDaemonConnectionStatus;

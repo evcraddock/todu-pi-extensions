@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type { ActorSummary } from "../domain/actor";
 import type { TaskSummary } from "../domain/task";
@@ -30,7 +31,7 @@ const IntegrationShowParams = Type.Object({
 const IntegrationUpdateParams = Type.Object({
   bindingId: Type.String({ description: "Integration binding ID" }),
   strategy: Type.Optional(
-    StringEnum(INTEGRATION_STRATEGY_VALUES, { description: "Optional integration strategy" })
+    stringEnum(INTEGRATION_STRATEGY_VALUES, { description: "Optional integration strategy" })
   ),
   enabled: Type.Optional(Type.Boolean({ description: "Optional enabled state" })),
   actorMappings: Type.Optional(

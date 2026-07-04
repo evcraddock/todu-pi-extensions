@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type {
   TaskDetail,
@@ -25,12 +26,12 @@ const TASK_SORT_DIRECTION_VALUES = ["asc", "desc"] as const;
 
 const TaskListParams = Type.Object({
   statuses: Type.Optional(
-    Type.Array(StringEnum(TASK_STATUS_VALUES), {
+    Type.Array(stringEnum(TASK_STATUS_VALUES), {
       description: "Optional task status filters",
     })
   ),
   priorities: Type.Optional(
-    Type.Array(StringEnum(TASK_PRIORITY_VALUES), {
+    Type.Array(stringEnum(TASK_PRIORITY_VALUES), {
       description: "Optional task priority filters",
     })
   ),
@@ -48,12 +49,12 @@ const TaskListParams = Type.Object({
   overdue: Type.Optional(Type.Boolean({ description: "Show overdue tasks only" })),
   today: Type.Optional(Type.Boolean({ description: "Show tasks due or scheduled today" })),
   sort: Type.Optional(
-    StringEnum(TASK_SORT_FIELD_VALUES, {
+    stringEnum(TASK_SORT_FIELD_VALUES, {
       description: "Sort by field (priority, dueDate, createdAt, updatedAt, title)",
     })
   ),
   sortDirection: Type.Optional(
-    StringEnum(TASK_SORT_DIRECTION_VALUES, {
+    stringEnum(TASK_SORT_DIRECTION_VALUES, {
       description: "Sort direction (asc or desc)",
     })
   ),

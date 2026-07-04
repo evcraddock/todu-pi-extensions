@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type {
   ProjectSummary,
@@ -43,10 +44,10 @@ const TaskUpdateParams = Type.Object({
   taskId: Type.String({ description: "Task ID" }),
   title: Type.Optional(Type.String({ description: "Optional replacement task title" })),
   status: Type.Optional(
-    StringEnum(TASK_STATUS_VALUES, { description: "Optional next task status" })
+    stringEnum(TASK_STATUS_VALUES, { description: "Optional next task status" })
   ),
   priority: Type.Optional(
-    StringEnum(TASK_PRIORITY_VALUES, { description: "Optional next task priority" })
+    stringEnum(TASK_PRIORITY_VALUES, { description: "Optional next task priority" })
   ),
   description: Type.Optional(
     Type.String({

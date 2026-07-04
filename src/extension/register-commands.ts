@@ -81,8 +81,7 @@ interface TaskAuthoringResult {
 }
 
 type EditTaskBrowseFiltersResult =
-  | { status: "saved"; filterState: TaskBrowseFilterState }
-  | { status: "cancelled" };
+  { status: "saved"; filterState: TaskBrowseFilterState } | { status: "cancelled" };
 
 type TaskBrowseViewResult =
   | { status: "selected"; taskId: TaskId }

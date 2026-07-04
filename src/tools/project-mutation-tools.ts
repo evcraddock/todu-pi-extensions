@@ -1,6 +1,7 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+
+import { stringEnum } from "./string-enum";
 
 import type { ProjectSummary, TaskPriority } from "../domain/task";
 import type { ActorService } from "../services/actor-service";
@@ -19,7 +20,7 @@ const ProjectCreateParams = Type.Object({
   name: Type.String({ description: "Project name" }),
   description: Type.Optional(Type.String({ description: "Optional project description" })),
   priority: Type.Optional(
-    StringEnum(PROJECT_PRIORITY_VALUES, { description: "Optional project priority" })
+    stringEnum(PROJECT_PRIORITY_VALUES, { description: "Optional project priority" })
   ),
 });
 
@@ -32,10 +33,10 @@ const ProjectUpdateParams = Type.Object({
     })
   ),
   status: Type.Optional(
-    StringEnum(PROJECT_STATUS_VALUES, { description: "Optional next project status" })
+    stringEnum(PROJECT_STATUS_VALUES, { description: "Optional next project status" })
   ),
   priority: Type.Optional(
-    StringEnum(PROJECT_PRIORITY_VALUES, { description: "Optional next project priority" })
+    stringEnum(PROJECT_PRIORITY_VALUES, { description: "Optional next project priority" })
   ),
   authorizedAssigneeActorIds: Type.Optional(
     Type.Array(Type.String({ description: "Actor ID" }), {
