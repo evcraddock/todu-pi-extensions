@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-07-04
+
+This release updates the extension’s npm dependencies so installed Pi packages receive the latest compatible Todu and Pi runtime versions.
+
+### Changed
+
+- Upgraded Todu, Pi, TypeScript, test, lint, formatting, and related direct npm dependencies to latest stable versions. (#124)
+- Refreshed the lockfile and applied npm audit fixes. (#124)
+- Updated compatibility code for newer `@todu/core` branded actor IDs, TypeScript 6, and TypeBox schema inference. (#124)
+
 ## [0.4.2] - 2026-06-05
 
 This release fixes typed task pickup so direct `pick up task-<id>` prompts update the active task UI context the same way `/tasks` pickup does.
