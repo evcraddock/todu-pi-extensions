@@ -136,6 +136,23 @@ describe("createTasksCommandHandler", () => {
     stderrWrite.mockRestore();
   });
 
+  it("reports a clear error when the daemon is unavailable", async () => {
+    const context = createCommandContext();
+    const handler = createTasksCommandHandler({
+      getTaskService: vi
+        .fn()
+        .mockRejectedValue(new Error("Todu daemon unavailable: connection timed out")),
+      taskBrowseFilterController: createTaskBrowseFilterController() as never,
+    });
+
+    await handler("", context as never);
+
+    expect(context.ui.notify).toHaveBeenCalledWith(
+      "Failed to browse tasks: Todu daemon unavailable: connection timed out",
+      "error"
+    );
+  });
+
   it("applies default filters on the first /tasks run instead of entering filter mode", async () => {
     const context = createCommandContext();
     const taskService = {} as TaskService;

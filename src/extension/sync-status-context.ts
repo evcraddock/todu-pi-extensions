@@ -126,12 +126,12 @@ const createSyncStatusContextController = (
       await ensureSyncEventSubscription();
       updateAmbientUi(ctx);
 
-      try {
-        await runtime.connection.connect();
-        await refreshSyncStatus();
-      } catch {
-        updateSyncStatus("unknown");
-      }
+      void runtime.connection
+        .connect()
+        .then(refreshSyncStatus)
+        .catch(() => {
+          updateSyncStatus("unknown");
+        });
     },
 
     async dispose(): Promise<void> {
