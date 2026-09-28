@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-28
+
+This release makes Todu connectivity status available on demand, keeps Pi usable when the Todu daemon is unavailable, and updates the Pi runtime libraries.
+
+### Added
+
+- Added `/todu-status` to report Todu daemon availability and version, plus sync server configuration and connection state. (#127)
+
+### Fixed
+
+- Prevented Todu daemon connection attempts from blocking Pi startup when the daemon is unavailable. (#126)
+- Preserved clear errors when daemon-dependent features are invoked without an available daemon. (#126)
+
+### Changed
+
+- Removed the persistent sync indicator from the Pi footer in favor of `/todu-status`. (#127)
+- Updated `@earendil-works/pi-ai`, `pi-coding-agent`, and `pi-tui` to `0.87.1`. (#125)
+
 ## [0.4.3] - 2026-07-04
 
 This release updates the extension’s npm dependencies so installed Pi packages receive the latest compatible Todu and Pi runtime versions.
