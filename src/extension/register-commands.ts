@@ -45,6 +45,7 @@ import {
   getDefaultTaskBrowseFilterContextController,
   type TaskBrowseFilterContextController,
 } from "./task-browse-filter-context";
+import { createToduStatusCommandHandler } from "./todu-status-command";
 
 const DEFAULT_TASK_BROWSE_FILTER_STATE: TaskBrowseFilterState = createTaskBrowseFilterState();
 
@@ -630,6 +631,11 @@ const registerCommands = (
   pi.registerCommand("habits", {
     description: "Show habits with streak and today status",
     handler: createHabitsCommandHandler(dependencies),
+  });
+
+  pi.registerCommand("todu-status", {
+    description: "Show Todu daemon and sync server status",
+    handler: createToduStatusCommandHandler(),
   });
 };
 

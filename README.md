@@ -63,6 +63,7 @@ Use the extension inside pi with commands such as:
 - `/task` to inspect the current task or a task by ID
 - `/task-new` to create a task
 - `/task-clear` to clear the current task context
+- `/todu-status` to show Todu daemon and sync server status
 
 The package also exposes agent tools for structured task operations such as listing tasks, showing task details, and creating or updating tasks.
 

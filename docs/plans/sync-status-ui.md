@@ -1,10 +1,12 @@
 # Sync status UI
 
-Status: ready-for-tasking
+Status: superseded
 Owner: unassigned
 Related architecture: docs/architecture.md#current-event-model-and-client-behavior
-Related tasks: task-f4f6d1b3
-Last updated: 2026-03-19
+Related tasks: task-f4f6d1b3, task-e19067d7
+Last updated: 2026-09-28
+
+This footer-based design was superseded by task `task-e19067d7`. Sync status is now available on demand through `/todu-status` and is not displayed persistently in the Pi footer.
 
 ## Problem
 
