@@ -14,8 +14,10 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# This filename is registered with npm as the package's trusted publisher.
 permissions:
   contents: write
+  id-token: write
 
 env:
   NODE_VERSION: "24"
@@ -144,8 +146,6 @@ jobs:
             echo "::error::Failed to publish ${{ needs.validate.outputs.package_name }}"
             exit 1
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Verify publish
         run: |
