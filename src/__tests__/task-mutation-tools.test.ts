@@ -1,3 +1,4 @@
+import { validateToolArguments } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectSummary, TaskComment, TaskDetail } from "@/domain/task";
@@ -153,6 +154,99 @@ describe("normalizeUpdateTaskInput", () => {
 });
 
 describe("resolveUpdateTaskInput", () => {
+  it.each([
+    {},
+    {
+      assigneeActorIds: undefined,
+      addAssigneeActorIds: undefined,
+      removeAssigneeActorIds: undefined,
+    },
+    { assigneeActorIds: null, addAssigneeActorIds: null, removeAssigneeActorIds: null },
+    { addAssigneeActorIds: [], removeAssigneeActorIds: [] },
+    { assigneeActorIds: null, addAssigneeActorIds: [], removeAssigneeActorIds: [] },
+  ])("preserves assignees for a status-only update with %j", async (assigneeParams) => {
+    const taskService = { getTask: vi.fn() } as unknown as TaskService;
+    const input = await resolveUpdateTaskInput(taskService, {
+      taskId: "task-123",
+      status: "done",
+      ...assigneeParams,
+    });
+
+    expect(input).toEqual({ taskId: "task-123", status: "done", priority: undefined });
+    expect(input).not.toHaveProperty("assigneeActorIds");
+    expect(taskService.getTask).not.toHaveBeenCalled();
+  });
+
+  it.each([{ unused: null }, { unused: [] }])(
+    "ignores unused incremental fields (%j) during explicit replacement",
+    async ({ unused }) => {
+      const params = {
+        taskId: "task-123",
+        assigneeActorIds: ["actor-reviewer"],
+        addAssigneeActorIds: unused,
+        removeAssigneeActorIds: unused,
+      };
+      await expect(resolveUpdateTaskInput({} as TaskService, params)).resolves.toMatchObject({
+        assigneeActorIds: ["actor-reviewer"],
+      });
+    }
+  );
+
+  it.each([{ unused: undefined }, { unused: null }, { unused: [] }])(
+    "preserves explicit clearing with unused incremental fields (%j)",
+    async ({ unused }) => {
+      const params = {
+        taskId: "task-123",
+        assigneeActorIds: [],
+        addAssigneeActorIds: unused,
+        removeAssigneeActorIds: unused,
+      };
+      await expect(resolveUpdateTaskInput({} as TaskService, params)).resolves.toMatchObject({
+        assigneeActorIds: [],
+      });
+    }
+  );
+
+  it("accepts null replacement alongside real incremental changes", async () => {
+    const taskService = {
+      getTask: vi.fn().mockResolvedValue(createTaskDetail()),
+    } as unknown as TaskService;
+    const params = {
+      taskId: "task-123",
+      assigneeActorIds: null,
+      addAssigneeActorIds: ["actor-reviewer"],
+      removeAssigneeActorIds: null,
+    };
+    await expect(resolveUpdateTaskInput(taskService, params)).resolves.toMatchObject({
+      assigneeActorIds: ["actor-user", "actor-reviewer"],
+    });
+  });
+
+  it.each([
+    { assigneeActorIds: ["actor-user"], addAssigneeActorIds: ["actor-reviewer"] },
+    { assigneeActorIds: ["actor-user"], removeAssigneeActorIds: ["actor-reviewer"] },
+    { assigneeActorIds: [], addAssigneeActorIds: ["actor-reviewer"] },
+    { assigneeActorIds: [], removeAssigneeActorIds: ["actor-reviewer"] },
+  ])("rejects actual conflicting assignment operations: %j", async (assigneeParams) => {
+    await expect(
+      resolveUpdateTaskInput({} as TaskService, { taskId: "task-123", ...assigneeParams })
+    ).rejects.toThrow(
+      "task_update cannot combine assigneeActorIds with addAssigneeActorIds or removeAssigneeActorIds"
+    );
+  });
+
+  it("rejects a no-op-only update", async () => {
+    const params = {
+      taskId: "task-123",
+      assigneeActorIds: null,
+      addAssigneeActorIds: [],
+      removeAssigneeActorIds: [],
+    };
+    await expect(resolveUpdateTaskInput({} as TaskService, params)).rejects.toThrow(
+      "task_update requires at least one supported field"
+    );
+  });
+
   it("supports replacing assignees directly", async () => {
     await expect(
       resolveUpdateTaskInput({} as TaskService, {
@@ -462,6 +556,87 @@ describe("createTaskCreateToolDefinition", () => {
 });
 
 describe("createTaskUpdateToolDefinition", () => {
+  it.each([
+    { assigneeActorIds: null, addAssigneeActorIds: null, removeAssigneeActorIds: null },
+    { assigneeActorIds: null, addAssigneeActorIds: [], removeAssigneeActorIds: [] },
+  ])(
+    "validates and executes status-only calls without assignment changes: %j",
+    async (assigneeParams) => {
+      const task = createTaskDetail({ status: "done" });
+      const taskService = {
+        getTask: vi.fn(),
+        updateTask: vi.fn().mockResolvedValue(task),
+      } as unknown as TaskService;
+      const tool = createTaskUpdateToolDefinition({
+        getTaskService: vi.fn().mockResolvedValue(taskService),
+      });
+      const params = validateToolArguments(tool, {
+        type: "toolCall",
+        id: "tool-call-1",
+        name: tool.name,
+        arguments: { taskId: "task-123", status: "done", ...assigneeParams },
+      });
+      expect(params).toEqual({ taskId: "task-123", status: "done", ...assigneeParams });
+      const result = await tool.execute("tool-call-1", params);
+
+      expect(taskService.updateTask).toHaveBeenCalledExactlyOnceWith({
+        taskId: "task-123",
+        status: "done",
+        priority: undefined,
+      });
+      expect(taskService.getTask).not.toHaveBeenCalled();
+      expect(result.details.input).not.toHaveProperty("assigneeActorIds");
+      expect(result.content[0]?.text).toContain("Changes: status=done");
+      expect(result.content[0]?.text).not.toContain("assigneeActorIds=");
+    }
+  );
+
+  it.each([{ assigneeActorIds: [] }, { assigneeActorIds: ["actor-user"] }])(
+    "validates and executes explicit replacement %j with empty incremental lists",
+    async ({ assigneeActorIds }) => {
+      const taskService = {
+        updateTask: vi.fn().mockResolvedValue(createTaskDetail({ assigneeActorIds })),
+      } as unknown as TaskService;
+      const tool = createTaskUpdateToolDefinition({
+        getTaskService: vi.fn().mockResolvedValue(taskService),
+      });
+      const params = validateToolArguments(tool, {
+        type: "toolCall",
+        id: "tool-call-1",
+        name: tool.name,
+        arguments: {
+          taskId: "task-123",
+          status: "done",
+          assigneeActorIds,
+          addAssigneeActorIds: [],
+          removeAssigneeActorIds: [],
+        },
+      });
+      await tool.execute("tool-call-1", params);
+      expect(taskService.updateTask).toHaveBeenCalledExactlyOnceWith({
+        taskId: "task-123",
+        status: "done",
+        priority: undefined,
+        assigneeActorIds,
+      });
+    }
+  );
+
+  it.each(["assigneeActorIds", "addAssigneeActorIds", "removeAssigneeActorIds"])(
+    "rejects invalid object values for %s at schema validation",
+    (field) => {
+      const tool = createTaskUpdateToolDefinition({ getTaskService: vi.fn() });
+      expect(() =>
+        validateToolArguments(tool, {
+          type: "toolCall",
+          id: "tool-call-1",
+          name: tool.name,
+          arguments: { taskId: "task-123", status: "done", [field]: { actorId: "actor-user" } },
+        })
+      ).toThrow("Validation failed for tool");
+    }
+  );
+
   it("rejects adding unauthorized or archived actors for new assignment", async () => {
     const taskService = {
       getTask: vi.fn().mockResolvedValue(createTaskDetail({ assigneeActorIds: ["actor-user"] })),
