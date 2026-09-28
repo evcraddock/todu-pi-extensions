@@ -65,18 +65,21 @@ const TaskUpdateParams = Type.Object({
     })
   ),
   assigneeActorIds: Type.Optional(
-    Type.Array(Type.String({ description: "Actor ID" }), {
-      description: "Optional full replacement assignee actor ID list",
+    Type.Union([Type.Array(Type.String({ description: "Actor ID" })), Type.Null()], {
+      description:
+        "Full replacement assignee actor ID list. Omit or use null to leave unchanged; [] explicitly clears all assignees. Do not combine with non-empty add/remove lists.",
     })
   ),
   addAssigneeActorIds: Type.Optional(
-    Type.Array(Type.String({ description: "Actor ID" }), {
-      description: "Optional actor IDs to add to the current assignee list",
+    Type.Union([Type.Array(Type.String({ description: "Actor ID" })), Type.Null()], {
+      description:
+        "Actor IDs to add to the current assignee list. Omit, null, or [] means no additions.",
     })
   ),
   removeAssigneeActorIds: Type.Optional(
-    Type.Array(Type.String({ description: "Actor ID" }), {
-      description: "Optional actor IDs to remove from the current assignee list",
+    Type.Union([Type.Array(Type.String({ description: "Actor ID" })), Type.Null()], {
+      description:
+        "Actor IDs to remove from the current assignee list. Omit, null, or [] means no removals.",
     })
   ),
 });
@@ -110,9 +113,9 @@ interface TaskUpdateToolParams {
   description?: string;
   labels?: string[];
   removeLabels?: string[];
-  assigneeActorIds?: string[];
-  addAssigneeActorIds?: string[];
-  removeAssigneeActorIds?: string[];
+  assigneeActorIds?: string[] | null;
+  addAssigneeActorIds?: string[] | null;
+  removeAssigneeActorIds?: string[] | null;
 }
 
 interface TaskCommentCreateToolParams {
@@ -217,8 +220,10 @@ const createTaskUpdateToolDefinition = ({
     "Supported fields are title, status, priority, description, labels, and actor-based assignee updates.",
     "Use labels to add labels to the existing task labels.",
     "Use removeLabels when labels should be removed from the existing task labels.",
-    "Use assigneeActorIds to replace the full assignee list.",
-    "Use addAssigneeActorIds or removeAssigneeActorIds for incremental multi-actor assignment changes.",
+    "Use assigneeActorIds to replace the full assignee list. An empty list explicitly clears all assignees.",
+    "For status-only or other non-assignment updates, omit assigneeActorIds or use null; never use [] as a placeholder.",
+    "Use addAssigneeActorIds or removeAssigneeActorIds for incremental multi-actor assignment changes. Omitted, null, or empty incremental lists are no-ops.",
+    "Do not combine an explicit assigneeActorIds replacement with non-empty addAssigneeActorIds or removeAssigneeActorIds.",
   ],
   parameters: TaskUpdateParams,
   async execute(_toolCallId: string, params: TaskUpdateToolParams) {
@@ -463,7 +468,7 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     input.labels = normalizeLabelList(params.labels, "labels");
   }
 
-  if (hasOwn(params, "assigneeActorIds")) {
+  if (params.assigneeActorIds != null) {
     input.assigneeActorIds = normalizeActorIdList(params.assigneeActorIds, "assigneeActorIds");
   }
 
@@ -493,8 +498,19 @@ const resolveUpdateTaskInput = async (
   params: TaskUpdateToolParams,
   dependencies: ResolveUpdateTaskInputDependencies = {}
 ): Promise<UpdateTaskInput> => {
-  if (params.assigneeActorIds !== undefined) {
-    if (params.addAssigneeActorIds !== undefined || params.removeAssigneeActorIds !== undefined) {
+  const addAssigneeActorIds =
+    params.addAssigneeActorIds == null
+      ? undefined
+      : normalizeActorIdList(params.addAssigneeActorIds, "addAssigneeActorIds");
+  const removeAssigneeActorIds =
+    params.removeAssigneeActorIds == null
+      ? undefined
+      : normalizeActorIdList(params.removeAssigneeActorIds, "removeAssigneeActorIds");
+  const hasIncrementalAssigneeUpdate =
+    (addAssigneeActorIds?.length ?? 0) > 0 || (removeAssigneeActorIds?.length ?? 0) > 0;
+
+  if (params.assigneeActorIds != null) {
+    if (hasIncrementalAssigneeUpdate) {
       throw new Error(
         "task_update cannot combine assigneeActorIds with addAssigneeActorIds or removeAssigneeActorIds"
       );
@@ -504,12 +520,6 @@ const resolveUpdateTaskInput = async (
     return validateNextAssigneeActorIds(taskService, input, dependencies);
   }
 
-  const addAssigneeActorIds = hasOwn(params, "addAssigneeActorIds")
-    ? normalizeActorIdList(params.addAssigneeActorIds, "addAssigneeActorIds")
-    : undefined;
-  const removeAssigneeActorIds = hasOwn(params, "removeAssigneeActorIds")
-    ? normalizeActorIdList(params.removeAssigneeActorIds, "removeAssigneeActorIds")
-    : undefined;
   const addLabels = hasOwn(params, "labels")
     ? normalizeLabelList(params.labels, "labels")
     : undefined;
@@ -517,8 +527,6 @@ const resolveUpdateTaskInput = async (
     ? normalizeLabelList(params.removeLabels, "removeLabels")
     : undefined;
 
-  const hasIncrementalAssigneeUpdate =
-    addAssigneeActorIds !== undefined || removeAssigneeActorIds !== undefined;
   const hasIncrementalLabelUpdate = addLabels !== undefined || removeLabels !== undefined;
 
   const baseInput: UpdateTaskInput = {

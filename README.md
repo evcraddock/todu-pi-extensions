@@ -67,6 +67,8 @@ Use the extension inside pi with commands such as:
 
 The package also exposes agent tools for structured task operations such as listing tasks, showing task details, and creating or updating tasks.
 
+For status-only `task_update` calls, omit assignee parameters or use `null`. `assigneeActorIds: []` explicitly clears all assignees; empty add/remove lists are no-ops. See [task update assignee parameters](docs/task-update-assignees.md) for details.
+
 ## Work on this project
 
 ```bash
