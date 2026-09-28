@@ -82,7 +82,7 @@ const createTaskBrowseFilterController = (initialState = createTaskBrowseFilterS
 };
 
 describe("registerCommands", () => {
-  it("registers the /tasks, /task, /task-clear, and /task-new commands", () => {
+  it("registers the Todu commands", () => {
     const pi = {
       appendEntry: vi.fn(),
       registerCommand: vi.fn(),
@@ -115,6 +115,13 @@ describe("registerCommands", () => {
       "task-new",
       expect.objectContaining({
         description: "Create a new todu task",
+        handler: expect.any(Function),
+      })
+    );
+    expect(pi.registerCommand).toHaveBeenCalledWith(
+      "todu-status",
+      expect.objectContaining({
+        description: "Show Todu daemon and sync server status",
         handler: expect.any(Function),
       })
     );

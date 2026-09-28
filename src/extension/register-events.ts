@@ -6,18 +6,13 @@ import {
   resetDefaultCurrentTaskContextController,
 } from "./current-task-context";
 import { createPickupTaskInputHandler } from "./pickup-task-input";
-import {
-  getDefaultSyncStatusContextController,
-  resetDefaultSyncStatusContextController,
-} from "./sync-status-context";
 import { resetDefaultTaskBrowseFilterContextController } from "./task-browse-filter-context";
 
 const registerEvents = (pi: ExtensionAPI): void => {
   const currentTaskContext = getDefaultCurrentTaskContextController(pi);
-  const syncStatusContext = getDefaultSyncStatusContextController(pi);
   const taskServiceRuntime = getDefaultToduTaskServiceRuntime();
   const restoreUiContext = async (ctx: ExtensionContext): Promise<void> => {
-    await Promise.all([currentTaskContext.restoreFromBranch(ctx), syncStatusContext.attach(ctx)]);
+    await currentTaskContext.restoreFromBranch(ctx);
   };
 
   pi.on("session_start", async (_event, ctx) => {
@@ -39,7 +34,6 @@ const registerEvents = (pi: ExtensionAPI): void => {
   pi.on("session_shutdown", async () => {
     await Promise.all([
       resetDefaultCurrentTaskContextController(),
-      resetDefaultSyncStatusContextController(),
       resetDefaultTaskBrowseFilterContextController(),
     ]);
   });
