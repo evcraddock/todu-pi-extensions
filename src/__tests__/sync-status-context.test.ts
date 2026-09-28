@@ -43,10 +43,53 @@ describe("createSyncStatusContextController", () => {
     const ctx = createContext();
 
     await controller.attach(ctx as never);
+    await vi.waitFor(() => {
+      expect(controller.getState()).toEqual({ syncStatus: "connected" });
+    });
 
     expect(request).toHaveBeenCalledWith("sync.status", {});
     expect(ctx.ui.setStatus).toHaveBeenLastCalledWith(SYNC_STATUS_KEY, "sync: connected");
-    expect(controller.getState()).toEqual({ syncStatus: "connected" });
+  });
+
+  it("does not wait for the initial daemon connection before completing attach", async () => {
+    let resolveConnect: (() => void) | undefined;
+    const connect = vi.fn().mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveConnect = resolve;
+      })
+    );
+    const controller = createSyncStatusContextController(
+      { appendEntry: vi.fn() },
+      {
+        runtime: {
+          client: {
+            on: vi.fn().mockResolvedValue({ unsubscribe: vi.fn() }),
+          },
+          connection: {
+            subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
+            connect,
+            request: vi.fn().mockResolvedValue({
+              ok: true,
+              value: { remote: { state: "connected" } },
+            }),
+          },
+        } as never,
+      }
+    );
+    const ctx = createContext();
+    const attachPromise = controller.attach(ctx as never);
+
+    const result = await Promise.race([
+      attachPromise.then(() => "attached"),
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("timed-out"), 25);
+      }),
+    ]);
+    resolveConnect?.();
+    await attachPromise;
+
+    expect(result).toBe("attached");
+    expect(connect).toHaveBeenCalledOnce();
   });
 
   it("updates status from sync.statusChanged payloads", async () => {
