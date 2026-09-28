@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-28
+
+Fixes false assignee conflicts during task updates.
+
+### Fixed
+
+- Treat null assignee parameters and empty incremental lists as no-ops, preserving status-only updates, explicit clearing, and genuine conflict checks. (#129)
+
+### Changed
+
+- Clarified assignee parameter guidance. (#129)
+- Switched npm releases to trusted publishing. (#128)
+
 ## [0.5.0] - 2026-09-28
 
 This release makes Todu connectivity status available on demand, keeps Pi usable when the Todu daemon is unavailable, and updates the Pi runtime libraries.
