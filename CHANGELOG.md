@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-08
+
+Updates the supported Pi runtime baseline.
+
+### Changed
+
+- Upgrade Pi libraries to stable 1.1.0. (#131)
+- Require Node.js 22.19.0+ and Pi 1.1.0+ within the 1.x release line; drop older-runtime support. (#131)
+
 ## [0.6.0] - 2026-10-08
 
 Gives task titles more screen space in `/tasks`.
