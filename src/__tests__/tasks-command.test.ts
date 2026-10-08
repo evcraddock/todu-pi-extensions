@@ -1,3 +1,5 @@
+import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectSummary, TaskDetail, TaskSummary } from "@/domain/task";
@@ -288,6 +290,86 @@ describe("createTasksCommandHandler", () => {
     await handler("", context as never);
 
     expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, task.id);
+  });
+
+  it("renders the real browse UI with full-width titles and second-line metadata", async () => {
+    const context = createCommandContext();
+    const task = { ...createTaskSummary(), title: "T".repeat(150) };
+    const taskService = {} as TaskService;
+    const openTaskDetail = vi.fn().mockResolvedValue(undefined);
+    const requestRender = vi.fn();
+    context.ui.custom.mockImplementation(
+      async (factory: Parameters<ExtensionCommandContext["ui"]["custom"]>[0]) => {
+        const done = vi.fn();
+        const component = await factory(
+          { requestRender } as never,
+          { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never,
+          {} as never,
+          done
+        );
+
+        for (const width of [40, 80, 120]) {
+          const lines = component.render(width).map(stripTerminalSequences);
+          const titleIndex = lines.indexOf(`  ${"T".repeat(width - 2)}`);
+          expect(titleIndex).toBeGreaterThan(0);
+          expect(lines[titleIndex + 1]).toContain("active • high • Todu Pi Extensions");
+          expect(lines[titleIndex]).not.toContain("active");
+          for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+        }
+
+        component.handleInput?.("\u001b[B");
+        component.handleInput?.("\u001b[B");
+        component.handleInput?.("\r");
+        expect(done).toHaveBeenCalledWith({ status: "selected", taskId: task.id });
+        return done.mock.calls[0]?.[0];
+      }
+    );
+    const handler = createTasksCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue(taskService),
+      taskBrowseFilterController: createTaskBrowseFilterController(
+        createTaskBrowseFilterState({ hasSavedFilter: true, status: "active" })
+      ) as never,
+      loadTasks: vi.fn().mockResolvedValue({ status: "loaded", tasks: [task] }),
+      openTaskDetail,
+    });
+
+    await handler("", context as never);
+
+    expect(openTaskDetail).toHaveBeenCalledWith(context, taskService, task.id);
+    expect(requestRender).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    { keys: ["\r"], status: "change-filters" },
+    { keys: ["\u001b[B", "\r"], status: "clear-filters" },
+    { keys: ["\u001b"], status: "closed" },
+  ])("preserves the real browse UI's $status action", async ({ keys, status }) => {
+    const context = createCommandContext();
+    const done = vi.fn();
+    context.ui.custom.mockImplementation(
+      async (factory: Parameters<ExtensionCommandContext["ui"]["custom"]>[0]) => {
+        const component = await factory(
+          { requestRender: vi.fn() } as never,
+          { fg: (_color: string, text: string) => text, bold: (text: string) => text } as never,
+          {} as never,
+          done
+        );
+        for (const key of keys) component.handleInput?.(key);
+        // Stop the handler loop after verifying the UI's emitted action.
+        return { status: "closed" };
+      }
+    );
+    const handler = createTasksCommandHandler({
+      getTaskService: vi.fn().mockResolvedValue({} as TaskService),
+      taskBrowseFilterController: createTaskBrowseFilterController(
+        createTaskBrowseFilterState({ hasSavedFilter: true })
+      ) as never,
+      loadTasks: vi.fn().mockResolvedValue({ status: "loaded", tasks: [createTaskSummary()] }),
+    });
+
+    await handler("", context as never);
+
+    expect(done).toHaveBeenCalledWith({ status });
   });
 
   it("shows the empty filtered state when no tasks match", async () => {

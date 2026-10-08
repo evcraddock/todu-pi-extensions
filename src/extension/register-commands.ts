@@ -32,7 +32,7 @@ import {
   formatTaskStatusLabel,
   type TaskDetailActionKind,
 } from "../ui/components/task-detail";
-import { createTaskListItem } from "../ui/components/task-list";
+import { createTaskList, createTaskListItem } from "../ui/components/task-list";
 import { formatHabitTable } from "../ui/components/habit-table";
 import { createTaskLoaderViewModel } from "../ui/components/loaders";
 import {
@@ -784,29 +784,33 @@ const selectTaskBrowseViewAction = async (
       new Text(theme.fg("muted", `Filters: ${formatTaskBrowseFilterSummary(filterState)}`), 1, 0)
     );
 
-    const selectList = new SelectList(items, Math.min(items.length, 12), {
-      selectedPrefix: (text) => theme.fg("accent", text),
-      selectedText: (text) => theme.fg("accent", text),
-      description: (text) => theme.fg("muted", text),
-      scrollInfo: (text) => theme.fg("dim", text),
-      noMatch: (text) => theme.fg("warning", text),
+    const selectList = createTaskList({
+      items,
+      // Two lines per item keep the existing twelve-line list budget.
+      maxVisible: Math.min(items.length, 6),
+      theme: {
+        selectedPrefix: (text) => theme.fg("accent", text),
+        selectedText: (text) => theme.fg("accent", text),
+        description: (text) => theme.fg("muted", text),
+        scrollInfo: (text) => theme.fg("dim", text),
+        noMatch: (text) => theme.fg("warning", text),
+      },
+      onSelect: (item) => {
+        const value = item.value;
+        if (value === "action:change-filters") {
+          done({ status: "change-filters" });
+          return;
+        }
+
+        if (value === "action:clear-filters") {
+          done({ status: "clear-filters" });
+          return;
+        }
+
+        done({ status: "selected", taskId: value.replace(/^task:/, "") });
+      },
+      onCancel: () => done({ status: "closed" }),
     });
-
-    selectList.onSelect = (item) => {
-      const value = item.value as string;
-      if (value === "action:change-filters") {
-        done({ status: "change-filters" });
-        return;
-      }
-
-      if (value === "action:clear-filters") {
-        done({ status: "clear-filters" });
-        return;
-      }
-
-      done({ status: "selected", taskId: value.replace(/^task:/, "") });
-    };
-    selectList.onCancel = () => done({ status: "closed" });
 
     container.addChild(selectList);
     container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter select • esc close"), 1, 0));
@@ -816,7 +820,7 @@ const selectTaskBrowseViewAction = async (
       render: (width: number) => container.render(width),
       invalidate: () => container.invalidate(),
       handleInput: (data: string) => {
-        selectList.handleInput(data);
+        selectList.handleInput?.(data);
         tui.requestRender();
       },
     };
