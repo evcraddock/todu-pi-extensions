@@ -17,11 +17,13 @@ Today the package is focused on task browsing, task detail, task creation, and t
 
 Install these first:
 
-- [pi via pi.dev](https://pi.dev)
+- [pi via pi.dev](https://pi.dev), version 1.1.0 or newer within the 1.x release line
 - [todu via github.com/evcraddock/todu](https://github.com/evcraddock/todu)
-- Node.js 20+
+- Node.js 22.19.0+
 - npm
 - [overmind](https://github.com/DarthSim/overmind) for the local dev environment
+
+The tested Pi baseline is 1.1.0 for `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, and `@earendil-works/pi-tui`. Pi supplies these runtime packages and `typebox`; they remain wildcard peer dependencies, following Pi's package guidance, and are not bundled. Wildcard peer ranges do not imply support for older Pi versions. Node.js 20 and Pi versions before 1.1.0 are no longer supported.
 
 ## Install the extension
 
