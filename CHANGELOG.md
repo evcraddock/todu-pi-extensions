@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-08
+
+Gives task titles more screen space in `/tasks`.
+
+### Changed
+
+- Use the full terminal width for single-line task titles, with status, priority, and project on the second line. (#130)
+- Preserve keyboard navigation, filtering, and scrolling. (#130)
+
 ## [0.5.1] - 2026-09-28
 
 Fixes false assignee conflicts during task updates.
