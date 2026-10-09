@@ -21,6 +21,10 @@ import { createTaskBrowseFilterState } from "@/services/task-browse-filter-store
 import type { TaskService } from "@/services/task-service";
 
 const createTaskSummary = (): TaskSummary => ({
+  dueDate: null,
+  scheduledDate: null,
+  createdAt: "2026-03-19T00:00:00.000Z",
+  updatedAt: "2026-03-19T00:00:00.000Z",
   id: "task-123",
   title: "Implement /tasks",
   status: "active",

@@ -890,6 +890,10 @@ const mapTaskSummary = (
   priority: toLocalTaskPriority(task.priority),
   projectId: task.projectId ?? null,
   projectName: null,
+  dueDate: task.dueDate ?? null,
+  scheduledDate: task.scheduledDate ?? null,
+  createdAt: task.createdAt,
+  updatedAt: task.updatedAt,
   labels: [...task.labels],
   assigneeActorIds: [...(task.assigneeActorIds ?? [])],
   assigneeDisplayNames: resolveActorDisplayNames(

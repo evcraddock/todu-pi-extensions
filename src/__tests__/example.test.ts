@@ -5,6 +5,10 @@ import { createTaskListItem } from "@/ui/components/task-list";
 describe("task list UI scaffolding", () => {
   it("creates a list item view model from a task summary", () => {
     const item = createTaskListItem({
+      dueDate: null,
+      scheduledDate: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
       id: "task-123",
       title: "Implement module layout",
       status: "active",

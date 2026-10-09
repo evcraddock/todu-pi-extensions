@@ -7,6 +7,10 @@ import {
 } from "@/ui/components/task-detail";
 
 const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
+  dueDate: null,
+  scheduledDate: null,
+  createdAt: "2026-03-19T00:00:00.000Z",
+  updatedAt: "2026-03-19T00:00:00.000Z",
   id: "task-123",
   title: "Implement task detail view",
   status: "active",
