@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-These are internal, reusable conventions for migrating Todu tool families to Pi 1.1.0 structured outputs. Existing registered tools still return their current text and `details`; this task does **not** migrate them. The helpers are in `src/tools/tool-result-contracts.ts`, with domain fragments in `src/tools/tool-domain-schemas.ts`. Neither module is a new public package export, workflow engine, bulk API, retry policy, or permission system.
+These are internal, reusable conventions for migrating Todu tool families to Pi 1.1.0 structured outputs. `task_list` and `task_show` now implement them; see [task read outputs](task-read-outputs.md). Other registered tools still return their current text and `details` without structured envelopes. The helpers are in `src/tools/tool-result-contracts.ts`, with domain fragments in `src/tools/tool-domain-schemas.ts`. Neither module is a new public package export, workflow engine, bulk API, retry policy, or permission system.
 
 Each migrated tool declares `outputSchema: createToolOutputSchema(DataSchema)` and returns matching `structuredContent` through `createStructuredToolResult`. `DataSchema` belongs to the tool family and defines its explicit, allowlisted payload. Use TypeBox JSON Schema types, not runtime-only types such as `Date`, `Map`, functions, or codecs. Close object schemas with `additionalProperties: false`; do not use `Type.Any()` for production payloads. Infer TypeScript output types with `ToolOutput<typeof DataSchema>` rather than duplicating interfaces.
 
@@ -49,7 +49,7 @@ Verified against the installed Pi 1.1.0 declarations and `dist/extensions/codemo
 For migrated tools, always check `ok` after `await`. `Promise.allSettled()` distinguishes rejected execution from resolved envelopes, but a `fulfilled` result is not necessarily a successful operation. During migration, inspect the tool declaration instead of assuming a legacy text result is an envelope.
 
 ```js
-// Example for a tool after its family migration (not current task_list behavior).
+// task_list returns a structured envelope in Pi 1.1.0+.
 try {
   const result = await tools.task_list({ statuses: ["active"] });
   if (!result.ok) {

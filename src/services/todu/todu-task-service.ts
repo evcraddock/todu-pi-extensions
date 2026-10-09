@@ -96,11 +96,19 @@ const hydrateTaskDetailProjectName = async (
   ]);
 
   const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
-  const outboundAssigneeWarnings = task.projectId
-    ? await buildOutboundAssigneeWarnings(client, task.projectId, task.assigneeActorIds, actorMap)
-    : [];
-
-  return hydrateTaskDetailMetadata(task, project, actorMap, outboundAssigneeWarnings);
+  const warningResult =
+    task.projectId && task.assigneeActorIds.length > 0
+      ? await buildOutboundAssigneeWarnings(client, task.projectId, task.assigneeActorIds, actorMap)
+      : { warnings: [], unavailable: false };
+  const hydrated = hydrateTaskDetailMetadata(
+    task,
+    project,
+    actorMap,
+    warningResult.unavailable ? task.outboundAssigneeWarnings : warningResult.warnings
+  );
+  return warningResult.unavailable
+    ? { ...hydrated, outboundAssigneeWarningsUnavailable: true }
+    : hydrated;
 };
 
 const listActorsBestEffort = async (client: ToduDaemonClient) => {
@@ -160,17 +168,18 @@ const buildOutboundAssigneeWarnings = async (
   projectId: string,
   assigneeActorIds: string[],
   actorMap: Map<string, { displayName: string; archived: boolean }>
-): Promise<OutboundAssigneeWarning[]> => {
-  let bindings: Awaited<ReturnType<ToduDaemonClient["listIntegrationBindings"]>> = [];
+): Promise<{ warnings: OutboundAssigneeWarning[]; unavailable: boolean }> => {
+  let bindings: Awaited<ReturnType<ToduDaemonClient["listIntegrationBindings"]>>;
   try {
-    if (typeof client.listIntegrationBindings === "function") {
-      bindings = (await client.listIntegrationBindings({ projectId, enabled: true })) ?? [];
+    if (typeof client.listIntegrationBindings !== "function") {
+      return { warnings: [], unavailable: true };
     }
+    bindings = (await client.listIntegrationBindings({ projectId, enabled: true })) ?? [];
   } catch {
-    bindings = [];
+    return { warnings: [], unavailable: true };
   }
 
-  return bindings.flatMap((binding) => {
+  const warnings = bindings.flatMap((binding) => {
     const mappedActorIds = new Set(
       Array.isArray(binding.options?.actorMappings)
         ? binding.options.actorMappings.map((mapping) => mapping.actorId)
@@ -193,6 +202,7 @@ const buildOutboundAssigneeWarnings = async (
       },
     ];
   });
+  return { warnings, unavailable: false };
 };
 
 const runTaskServiceOperation = async <T>(

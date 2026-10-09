@@ -61,6 +61,8 @@ export interface TaskDetail extends TaskSummary {
   descriptionApproval: ImportedContentApproval | null;
   comments: TaskComment[];
   outboundAssigneeWarnings: OutboundAssigneeWarning[];
+  /** True when outbound warning lookup failed; an empty warning array is then incomplete. */
+  outboundAssigneeWarningsUnavailable?: boolean;
 }
 
 export type TaskSortField = "priority" | "dueDate" | "createdAt" | "updatedAt" | "title";

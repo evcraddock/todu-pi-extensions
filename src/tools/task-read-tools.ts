@@ -2,8 +2,17 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { stringEnum } from "./string-enum";
+import {
+  TaskListOutputSchema,
+  TaskShowOutputSchema,
+  type NormalizedTaskFilter,
+} from "./task-read-schemas";
+import { createStructuredToolResult, safeToolError } from "./tool-result-contracts";
 
+import type { ImportedContentApproval } from "../domain/approval";
 import type {
+  OutboundAssigneeWarning,
+  TaskComment,
   TaskDetail,
   TaskFilter,
   TaskId,
@@ -16,6 +25,7 @@ import type {
 import { browseTasks } from "../flows/browse-tasks";
 import { showTaskDetail } from "../flows/show-task-detail";
 import type { TaskService } from "../services/task-service";
+import { ToduTaskServiceError } from "../services/todu/todu-task-service";
 import { formatApprovalSummary } from "../utils/approval-format";
 import { getSystemTimezone } from "../utils/timezone";
 
@@ -116,27 +126,51 @@ const createTaskListToolDefinition = ({ getTaskService }: TaskReadToolDependenci
     "Use this tool for backend task lookups in normal chat instead of slash-command task browsing.",
   ],
   parameters: TaskListParams,
+  outputSchema: TaskListOutputSchema,
   async execute(_toolCallId: string, params: TaskListToolParams) {
     const filter = normalizeTaskListFilter(params);
-
+    let tasks: TaskSummary[];
     try {
       const taskService = await getTaskService();
-      const tasks = await browseTasks({ taskService }, filter);
-      const details: TaskListToolDetails = {
-        kind: "task_list",
-        filter,
-        tasks,
-        total: tasks.length,
-        empty: tasks.length === 0,
-      };
-
-      return {
-        content: [{ type: "text" as const, text: formatTaskListContent(details) }],
-        details,
-      };
+      tasks = await browseTasks({ taskService }, filter);
     } catch (error) {
-      throw new Error(formatToolError(error, "task_list failed"), { cause: error });
+      const status = classifyTaskReadError(error, "task_list");
+      return createStructuredToolResult({
+        outputSchema: TaskListOutputSchema,
+        structuredContent: {
+          schemaVersion: 1,
+          tool: "task_list",
+          ok: false,
+          status,
+          error: safeToolError(status),
+          warnings: [],
+        },
+        text: `task_list failed: ${safeToolError(status).message}`,
+        details: undefined,
+      });
     }
+
+    const projected = projectTaskReadData(() => tasks.map(projectTaskSummary));
+    const details: TaskListToolDetails = {
+      kind: "task_list",
+      filter,
+      tasks: projected,
+      total: projected.length,
+      empty: projected.length === 0,
+    };
+    return createStructuredToolResult({
+      outputSchema: TaskListOutputSchema,
+      structuredContent: {
+        schemaVersion: 1,
+        tool: "task_list",
+        ok: true,
+        status: details.empty ? "empty" : "success",
+        warnings: [],
+        data: { filter, tasks: projected, total: details.total, empty: details.empty },
+      },
+      text: projectTaskReadData(() => formatTaskListContent(details)),
+      details,
+    });
   },
 });
 
@@ -150,37 +184,94 @@ const createTaskShowToolDefinition = ({ getTaskService }: TaskReadToolDependenci
     "If the task is missing, report the explicit not-found result instead of guessing.",
   ],
   parameters: TaskShowParams,
+  outputSchema: TaskShowOutputSchema,
   async execute(_toolCallId: string, params: TaskShowToolParams) {
-    try {
-      const taskService = await getTaskService();
-      const task = await showTaskDetail({ taskService }, params.taskId);
-      if (!task) {
-        const details: TaskShowToolDetails = {
-          kind: "task_show",
-          taskId: params.taskId,
-          found: false,
-        };
-
-        return {
-          content: [{ type: "text" as const, text: `Task not found: ${params.taskId}` }],
-          details,
-        };
+    let task: TaskDetail | null;
+    let failure: "validation_error" | "backend_error" | undefined;
+    if (!params.taskId.trim()) {
+      failure = "validation_error";
+      task = null;
+    } else {
+      try {
+        const taskService = await getTaskService();
+        task = await showTaskDetail({ taskService }, params.taskId);
+      } catch (error) {
+        failure = classifyTaskReadError(error, "task_show");
+        task = null;
       }
-
+    }
+    if (failure) {
+      return createStructuredToolResult({
+        outputSchema: TaskShowOutputSchema,
+        structuredContent: {
+          schemaVersion: 1,
+          tool: "task_show",
+          ok: false,
+          status: failure,
+          error: safeToolError(failure),
+          warnings: [],
+        },
+        text: `task_show failed: ${safeToolError(failure).message}`,
+        details: undefined,
+      });
+    }
+    if (task === null) {
       const details: TaskShowToolDetails = {
         kind: "task_show",
         taskId: params.taskId,
-        found: true,
-        task,
+        found: false,
       };
-
-      return {
-        content: [{ type: "text" as const, text: formatTaskShowContent(task) }],
+      return createStructuredToolResult({
+        outputSchema: TaskShowOutputSchema,
+        structuredContent: {
+          schemaVersion: 1,
+          tool: "task_show",
+          ok: false,
+          status: "not_found",
+          warnings: [],
+          target: { entityType: "task", entityId: params.taskId },
+        },
+        text: `Task not found: ${params.taskId}`,
         details,
-      };
-    } catch (error) {
-      throw new Error(formatToolError(error, "task_show failed"), { cause: error });
+      });
     }
+
+    const projected = projectTaskReadData(() => projectTaskDetail(task));
+    const details: TaskShowToolDetails = {
+      kind: "task_show",
+      taskId: params.taskId,
+      found: true,
+      task: projected,
+    };
+    return createStructuredToolResult({
+      outputSchema: TaskShowOutputSchema,
+      structuredContent: {
+        schemaVersion: 1,
+        tool: "task_show",
+        ok: true,
+        status: "success",
+        data: { taskId: params.taskId, found: true, task: projected },
+        warnings: [
+          ...projected.outboundAssigneeWarnings.map((warning) => ({
+            code: "unmapped_outbound_assignees",
+            message: "Some outbound assignees have no integration mapping.",
+            target: { entityType: "task" as const, entityId: projected.id },
+            outboundAssigneeWarning: warning,
+          })),
+          ...(projected.outboundAssigneeWarningsUnavailable
+            ? [
+                {
+                  code: "outbound_assignee_warnings_unavailable",
+                  message: "Outbound assignee warning enrichment is unavailable.",
+                  target: { entityType: "task" as const, entityId: projected.id },
+                },
+              ]
+            : []),
+        ],
+      },
+      text: projectTaskReadData(() => formatTaskShowContent(projected)),
+      details,
+    });
   },
 });
 
@@ -192,7 +283,7 @@ const registerTaskReadTools = (
   pi.registerTool(createTaskShowToolDefinition(dependencies));
 };
 
-const normalizeTaskListFilter = (params: TaskListToolParams): TaskFilter => ({
+const normalizeTaskListFilter = (params: TaskListToolParams): NormalizedTaskFilter => ({
   statuses: normalizeArrayFilter(params.statuses),
   priorities: normalizeArrayFilter(params.priorities),
   projectId: normalizeOptionalText(params.projectId),
@@ -260,7 +351,6 @@ const formatTaskShowContent = (task: TaskDetail): string => {
 
   if (task.comments.length === 0) {
     lines.push("- (none)");
-    return lines.join("\n");
   }
 
   for (const comment of task.comments) {
@@ -280,6 +370,9 @@ const formatTaskShowContent = (task: TaskDetail): string => {
     }
   }
 
+  if (task.outboundAssigneeWarningsUnavailable) {
+    lines.push("", "Warning: Outbound assignee warning enrichment is unavailable.");
+  }
   if (lines.at(-1) === "") {
     lines.pop();
   }
@@ -292,13 +385,100 @@ const indentLines = (content: string, spaces: number): string[] => {
   return content.split(/\r?\n/).map((line) => `${indent}${line}`);
 };
 
-const formatToolError = (error: unknown, prefix: string): string => {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return `${prefix}: ${error.message}`;
+const classifyTaskReadError = (
+  error: unknown,
+  tool: "task_list" | "task_show"
+): "validation_error" | "backend_error" => {
+  if (error instanceof ToduTaskServiceError) {
+    if (error.causeCode === "validation") return "validation_error";
+    if (
+      [
+        "not-found",
+        "conflict",
+        "precondition-failed",
+        "unavailable",
+        "timeout",
+        "internal",
+      ].includes(error.causeCode)
+    ) {
+      // Enrichment failures (including not-found) do not prove the task itself is absent.
+      return "backend_error";
+    }
   }
-
-  return prefix;
+  throw new Error(`${tool} failed: Unexpected task read failure.`);
 };
+
+// Keep contract/projection failures outside the service error boundary; never echo payloads.
+const projectTaskReadData = <T>(project: () => T): T => {
+  try {
+    return project();
+  } catch {
+    throw new Error("Invalid task read data.");
+  }
+};
+
+const projectTaskSummary = (task: TaskSummary): TaskSummary => ({
+  id: task.id,
+  title: task.title,
+  status: task.status,
+  priority: task.priority,
+  projectId: task.projectId,
+  projectName: task.projectName,
+  dueDate: task.dueDate,
+  scheduledDate: task.scheduledDate,
+  createdAt: task.createdAt,
+  updatedAt: task.updatedAt,
+  labels: task.labels,
+  assigneeActorIds: task.assigneeActorIds,
+  assigneeDisplayNames: task.assigneeDisplayNames,
+  assignees: task.assignees,
+});
+
+const projectApproval = (
+  approval: ImportedContentApproval | null
+): ImportedContentApproval | null =>
+  approval === null
+    ? null
+    : {
+        state: approval.state,
+        sourceBindingId: approval.sourceBindingId,
+        sourceActorId: approval.sourceActorId,
+        sourceFingerprint: approval.sourceFingerprint,
+        reviewedAt: approval.reviewedAt,
+        reviewedByActorId: approval.reviewedByActorId,
+      };
+
+const projectTaskComment = (comment: TaskComment): TaskComment => ({
+  id: comment.id,
+  taskId: comment.taskId,
+  content: comment.content,
+  authorActorId: comment.authorActorId,
+  authorDisplayName: comment.authorDisplayName,
+  author: comment.author,
+  createdAt: comment.createdAt,
+  contentApproval: projectApproval(comment.contentApproval),
+});
+
+const projectAssigneeWarning = (warning: OutboundAssigneeWarning): OutboundAssigneeWarning => ({
+  bindingId: warning.bindingId,
+  provider: warning.provider,
+  targetRef: warning.targetRef,
+  unmappedActorIds: warning.unmappedActorIds,
+  unmappedAssigneeDisplayNames: warning.unmappedAssigneeDisplayNames,
+});
+
+const projectTaskDetail = (task: TaskDetail): TaskDetail => ({
+  ...projectTaskSummary(task),
+  description: task.description,
+  descriptionApproval: projectApproval(task.descriptionApproval),
+  comments: task.comments.map(projectTaskComment),
+  outboundAssigneeWarnings: task.outboundAssigneeWarnings.map(projectAssigneeWarning),
+  ...(task.outboundAssigneeWarningsUnavailable === undefined
+    ? {}
+    : {
+        outboundAssigneeWarningsUnavailable: task.outboundAssigneeWarningsUnavailable,
+      }),
+});
 
 export type { TaskListToolDetails, TaskShowToolDetails, TaskReadToolDependencies };
 export {

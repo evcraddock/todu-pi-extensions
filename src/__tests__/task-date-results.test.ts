@@ -124,7 +124,10 @@ describe("task date results", () => {
       });
       const tool = createTaskListToolDefinition({ getTaskService: async () => service });
       const result = await tool.execute("list", {});
-      expect(result.details.tasks[0]).toMatchObject(expectedDates);
+      expect(result.details?.tasks[0]).toMatchObject(expectedDates);
+      expect(result.structuredContent.ok).toBe(true);
+      if (!result.structuredContent.ok) throw new Error("Expected a successful task list");
+      expect(result.structuredContent.data.tasks[0]).toMatchObject(expectedDates);
       expect(JSON.parse(JSON.stringify(result.details)).tasks[0]).toMatchObject(expectedDates);
       if (expected.dueDate !== null) {
         expect(result.content[0].text).toContain(`due: ${expected.dueDate}`);
@@ -146,7 +149,10 @@ describe("task date results", () => {
       });
       const tool = createTaskShowToolDefinition({ getTaskService: async () => service });
       const result = await tool.execute("show", { taskId: "task-1" });
-      expect(result.details.task).toMatchObject(expectedDates);
+      expect(result.details?.task).toMatchObject(expectedDates);
+      expect(result.structuredContent.ok).toBe(true);
+      if (!result.structuredContent.ok) throw new Error("Expected a successful task detail");
+      expect(result.structuredContent.data.task).toMatchObject(expectedDates);
       expect(JSON.parse(JSON.stringify(result.details)).task).toMatchObject(expectedDates);
       if (expected.dueDate !== null) {
         expect(result.content[0].text).toContain(`Due: ${expected.dueDate}`);
