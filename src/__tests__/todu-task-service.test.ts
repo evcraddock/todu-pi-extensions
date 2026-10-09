@@ -9,6 +9,10 @@ import { ToduDaemonClientError } from "@/services/todu/daemon-client";
 describe("createToduTaskService", () => {
   it("hydrates task summaries with project names for browse flows", async () => {
     const taskSummary: TaskSummary = {
+      dueDate: null,
+      scheduledDate: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
       id: "task-123",
       title: "Set up foundation",
       status: "active",
@@ -87,6 +91,10 @@ describe("createToduTaskService", () => {
 
   it("hydrates task detail with project name for detail rendering", async () => {
     const taskDetail: TaskDetail = {
+      dueDate: null,
+      scheduledDate: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
       id: "task-123",
       title: "Set up foundation",
       status: "active",
@@ -248,6 +256,10 @@ describe("createToduTaskService", () => {
 
   it("allows browse flow calls to recover after a transient project lookup failure", async () => {
     const taskSummary: TaskSummary = {
+      dueDate: null,
+      scheduledDate: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
       id: "task-123",
       title: "Set up foundation",
       status: "active",
@@ -344,6 +356,10 @@ describe("createToduTaskService", () => {
 
   it("allows detail flow calls to recover after a transient project lookup failure", async () => {
     const taskDetail: TaskDetail = {
+      dueDate: null,
+      scheduledDate: null,
+      createdAt: "2026-03-19T00:00:00.000Z",
+      updatedAt: "2026-03-19T00:00:00.000Z",
       id: "task-123",
       title: "Set up foundation",
       status: "active",

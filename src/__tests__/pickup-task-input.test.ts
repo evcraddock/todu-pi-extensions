@@ -8,6 +8,10 @@ import {
 import type { TaskService } from "@/services/task-service";
 
 const createTaskDetail = (overrides: Partial<TaskDetail> = {}): TaskDetail => ({
+  dueDate: overrides.dueDate ?? null,
+  scheduledDate: overrides.scheduledDate ?? null,
+  createdAt: overrides.createdAt ?? "2026-03-19T00:00:00.000Z",
+  updatedAt: overrides.updatedAt ?? "2026-03-19T00:00:00.000Z",
   id: overrides.id ?? "task-123",
   title: overrides.title ?? "Implement pickup input",
   status: overrides.status ?? "active",

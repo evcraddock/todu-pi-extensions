@@ -44,6 +44,12 @@ export interface TaskSummary {
   priority: TaskPriority;
   projectId: ProjectId | null;
   projectName: string | null;
+  /** Backend due/scheduled values, preserved verbatim; absent values are null. */
+  dueDate: string | null;
+  scheduledDate: string | null;
+  /** Required backend timestamps, preserved verbatim without timezone conversion. */
+  createdAt: string;
+  updatedAt: string;
   labels: string[];
   assigneeActorIds: ActorId[];
   assigneeDisplayNames: string[];
