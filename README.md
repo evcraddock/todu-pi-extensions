@@ -71,6 +71,8 @@ The package also exposes agent tools for structured task operations such as list
 
 For status-only `task_update` calls, omit assignee parameters or use `null`. `assigneeActorIds: []` explicitly clears all assignees; empty add/remove lists are no-ops. See [task update assignee parameters](docs/task-update-assignees.md) for details.
 
+For contributors, [structured tool result contracts](docs/tool-result-contracts.md) define shared schemas and codemode result/error conventions for upcoming tool-family migrations. Existing tools have not yet migrated to those outputs.
+
 ## Work on this project
 
 ```bash
