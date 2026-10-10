@@ -77,6 +77,8 @@ Task list/detail data preserves backend due, scheduled, creation, and update dat
 
 For contributors, [structured tool result contracts](docs/tool-result-contracts.md) define the shared schemas, metadata safeguards, and result/error conventions.
 
+For local compatibility verification, `npm run smoke:codemode` exercises packaged task reads through the real Pi SDK/codemode runtime with isolated synthetic state. It requires no external model credentials and stays outside default CI. See [opt-in codemode smoke coverage and limitations](docs/codemode-smoke.md).
+
 ## Work on this project
 
 ```bash
