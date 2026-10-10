@@ -2,7 +2,7 @@
 
 ## Returned fields
 
-`TaskSummary` and its derived `TaskDetail` retain these backend fields in list, search, and detail results. The names and backend types are verified against `Task` / `TaskWithDetail` in the installed `@todu/core` 0.23.2 declarations (`dist/types.d.ts`). Service metadata enrichment preserves them, and `task_list` / `task_show` include them in their existing result `details`.
+`TaskSummary` and its derived `TaskDetail` retain these backend fields in list, search, and detail results. The names and backend types are verified against `Task` / `TaskWithDetail` in the installed `@todu/core` 0.23.2 declarations (`dist/types.d.ts`). Service metadata enrichment preserves them, and `task_list` / `task_show` include them in both their compatible result `details` and structured output `data`.
 
 | Field           | Backend type    | Extension type   | Meaning / missing value                                                                          |
 | --------------- | --------------- | ---------------- | ------------------------------------------------------------------------------------------------ |
@@ -48,8 +48,8 @@ tasks.sort((a, b) => {
 
 That representation check is not a complete calendar-date validator; use it only with valid backend dates. For timestamp collections with explicit timezones, compare parsed instants instead of string ordering: `Date.parse(a.dueDate) - Date.parse(b.dueDate)`, after the same null checks and validation that both values are finite instants. Offset timestamps can sort differently lexically and chronologically. If a collection mixes timestamps and date-only values, define the calendar-date-versus-instant policy explicitly; do not introduce an implicit local timezone. The extension's existing per-query sort/filter behavior is unchanged by this mapping task; these examples describe caller-side merged-result ordering, not a new workflow policy or comparator API.
 
-These fields are in domain/service results and the tools' UI/state `details`. Codemode still receives legacy text from these tools until the separate structured task-read output migration adds `outputSchema` and `structuredContent`. No parsing-based workaround or next-actions workflow is introduced here.
+Codemode receives the structured envelope directly from `task_list` and `task_show`. Check `ok` before reading `data.tasks` or `data.task`; see [task read outputs](task-read-outputs.md) for a merge/deduplicate/sort example. No parsing-based workaround or next-actions workflow is introduced.
 
 ## Verification
 
-`src/__tests__/task-date-results.test.ts` covers populated, absent, undefined, and null optional dates; independent due/scheduled values; exact date-only and offset timestamp preservation; service enrichment and tool details; search results; unchanged TUI models; and caller-side merging/deduplication/sorting with nulls last. All RPC responses in these unit tests are mocked; they do not connect to or modify normal Todu data.
+`src/__tests__/task-date-results.test.ts` covers populated, absent, undefined, and null optional dates; independent due/scheduled values; exact date-only and offset timestamp preservation; service enrichment and tool details/structured outputs; search results; unchanged TUI models; and caller-side merging/deduplication/sorting with nulls last. All RPC responses in these unit tests are mocked; they do not connect to or modify normal Todu data.

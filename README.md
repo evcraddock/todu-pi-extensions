@@ -73,7 +73,9 @@ For status-only `task_update` calls, omit assignee parameters or use `null`. `as
 
 Task list/detail data preserves backend due, scheduled, creation, and update dates. Populated due dates also appear in tool text. See [task date meanings and missing-value behavior](docs/task-dates.md).
 
-For contributors, [structured tool result contracts](docs/tool-result-contracts.md) define shared schemas and codemode result/error conventions for upcoming tool-family migrations. Existing tools have not yet migrated to those outputs.
+`task_list` and `task_show` expose schema-validated structured envelopes to codemode while retaining readable text and compatible UI details. Check `ok` after every call, including fulfilled promises. See [task read outputs and script examples](docs/task-read-outputs.md). Other tool families still return legacy text.
+
+For contributors, [structured tool result contracts](docs/tool-result-contracts.md) define the shared schemas, metadata safeguards, and result/error conventions.
 
 ## Work on this project
 

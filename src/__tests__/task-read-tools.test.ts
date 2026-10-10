@@ -251,7 +251,7 @@ describe("createTaskListToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", {})).rejects.toThrow(
-      "task_list failed: daemon unavailable"
+      "task_list failed: Unexpected task read failure."
     );
   });
 });
@@ -335,7 +335,7 @@ describe("createTaskShowToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", { taskId: "task-123" })).rejects.toThrow(
-      "task_show failed: daemon unavailable"
+      "task_show failed: Unexpected task read failure."
     );
   });
 });
