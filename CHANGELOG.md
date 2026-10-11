@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-10
+
+Adds structured task reads for codemode while preserving readable output.
+
+### Added
+
+- Validated structured outputs for task_list and task_show. (#134)
+- Shared structured-result contracts. (#132)
+- Opt-in, isolated real-runtime codemode compatibility smoke. (#135)
+
+### Changed
+
+- Preserve due, scheduled, created, and updated task dates. (#133)
+
+### Fixed
+
+- Show outbound-assignee warnings even when a task has no comments. (#134)
+
 ## [0.7.0] - 2026-10-08
 
 Updates the supported Pi runtime baseline.
