@@ -47,6 +47,8 @@ const createCurrentTaskContextController = (
   let activeContext: ExtensionContext | null = null;
   let dataChangedSubscription: ToduDaemonSubscription | null = null;
   let subscribePromise: Promise<ToduDaemonSubscription> | null = null;
+  let selectionVersion = 0;
+  let refreshVersion = 0;
 
   const updateAmbientUi = (ctx: ExtensionContext): void => {
     if (!ctx.hasUI) {
@@ -97,7 +99,15 @@ const createCurrentTaskContextController = (
   };
 
   const refreshCurrentTask = async (ctx: ExtensionContext): Promise<void> => {
+    const selectionAtStart = selectionVersion;
+    const refreshAtStart = ++refreshVersion;
     const { currentTaskId } = taskSessionStore.getState();
+    // Both newer refreshes and selection/lifecycle changes supersede this request.
+    const isCurrentRefresh = (): boolean =>
+      selectionAtStart === selectionVersion &&
+      refreshAtStart === refreshVersion &&
+      activeContext === ctx &&
+      taskSessionStore.getState().currentTaskId === currentTaskId;
     if (!currentTaskId) {
       currentTask = null;
       updateAmbientUi(ctx);
@@ -106,7 +116,15 @@ const createCurrentTaskContextController = (
 
     try {
       const taskService = await runtime.ensureConnected();
+      if (!isCurrentRefresh()) {
+        return;
+      }
+
       const task = await taskService.getTask(currentTaskId);
+      if (!isCurrentRefresh()) {
+        return;
+      }
+
       if (!task || isTerminalCurrentTaskStatus(task.status)) {
         currentTask = null;
         taskSessionStore.clearCurrentTask();
@@ -118,6 +136,10 @@ const createCurrentTaskContextController = (
       currentTask = task;
       updateAmbientUi(ctx);
     } catch {
+      if (!isCurrentRefresh()) {
+        return;
+      }
+
       currentTask = null;
       updateAmbientUi(ctx);
     }
@@ -130,6 +152,7 @@ const createCurrentTaskContextController = (
     }),
 
     async restoreFromBranch(ctx: ExtensionContext): Promise<void> {
+      const selectionAtStart = ++selectionVersion;
       activeContext = ctx;
       taskSessionStore.replaceState(restoreTaskSessionState(ctx.sessionManager.getBranch()));
 
@@ -137,10 +160,13 @@ const createCurrentTaskContextController = (
         await ensureDataChangedSubscription();
       }
 
-      await refreshCurrentTask(ctx);
+      if (selectionAtStart === selectionVersion) {
+        await refreshCurrentTask(ctx);
+      }
     },
 
     async setCurrentTask(ctx: ExtensionContext, task: TaskDetail | null): Promise<void> {
+      const selectionAtStart = ++selectionVersion;
       activeContext = ctx;
       currentTask = task;
 
@@ -151,8 +177,10 @@ const createCurrentTaskContextController = (
         taskSessionStore.clearCurrentTask();
       }
 
-      persistTaskSessionState(pi.appendEntry, taskSessionStore.getState());
-      updateAmbientUi(ctx);
+      if (selectionAtStart === selectionVersion) {
+        persistTaskSessionState(pi.appendEntry, taskSessionStore.getState());
+        updateAmbientUi(ctx);
+      }
     },
 
     async clearCurrentTask(ctx: ExtensionContext): Promise<void> {
@@ -168,6 +196,7 @@ const createCurrentTaskContextController = (
     },
 
     async dispose(): Promise<void> {
+      selectionVersion++;
       dataChangedSubscription?.unsubscribe();
       dataChangedSubscription = null;
       subscribePromise = null;
