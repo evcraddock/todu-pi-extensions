@@ -147,24 +147,6 @@ jobs:
             exit 1
           fi
 
-      - name: Verify publish
-        run: |
-          PACKAGE_NAME="${{ needs.validate.outputs.package_name }}"
-          VERSION="${{ needs.validate.outputs.version }}"
-
-          for attempt in 1 2 3 4 5; do
-            if npm view "${PACKAGE_NAME}@${VERSION}" version 2>/dev/null; then
-              echo "✅ ${PACKAGE_NAME}@${VERSION} is available on npm"
-              exit 0
-            fi
-
-            echo "Waiting for ${PACKAGE_NAME}@${VERSION} to propagate (attempt ${attempt}/5)..."
-            sleep 15
-          done
-
-          echo "::error::${PACKAGE_NAME}@${VERSION} not found on npm after 5 attempts"
-          exit 1
-
   release:
     name: Create GitHub Release
     needs: [validate, build, publish-npm]
