@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-21
+
+Prevents stale refreshes from restoring completed tasks in the current-task widget and footer.
+
+### Fixed
+
+- Ignore superseded refresh responses after newer refreshes or task-selection changes. (#136)
+
+### Changed
+
+- Simplify contribution workflow guidelines. (#136)
+
 ## [0.8.0] - 2026-10-10
 
 Adds structured task reads for codemode while preserving readable output.
