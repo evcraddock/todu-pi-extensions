@@ -19,7 +19,8 @@ export interface CreateTaskInput {
 
 export interface UpdateTaskInput {
   taskId: TaskId;
-  scheduledDate?: string;
+  /** Omit to preserve the schedule; null explicitly removes it. */
+  scheduledDate?: string | null;
   title?: string;
   status?: TaskStatus;
   priority?: TaskPriority;

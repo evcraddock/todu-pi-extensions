@@ -25,7 +25,10 @@ import type {
 } from "../services/task-service";
 import type { ProjectService } from "../services/project-service";
 import { ToduTaskServiceError } from "../services/todu/todu-task-service";
-import { normalizeTaskScheduledDate } from "../utils/task-scheduled-date";
+import {
+  normalizeTaskScheduledDate,
+  normalizeTaskScheduledDateUpdate,
+} from "../utils/task-scheduled-date";
 
 const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelled"] as const;
 const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
@@ -50,9 +53,9 @@ const TaskCreateParams = Type.Object({
 const TaskUpdateParams = Type.Object({
   taskId: Type.String({ description: "Task ID" }),
   scheduledDate: Type.Optional(
-    Type.String({
+    Type.Union([Type.String(), Type.Null()], {
       description:
-        "Optional replacement scheduled date (YYYY-MM-DD or ISO timestamp). Omit to leave unchanged.",
+        "Set or change the scheduled date (YYYY-MM-DD or ISO timestamp). Use null or an empty string to remove it. Omit to leave unchanged.",
     })
   ),
   title: Type.Optional(Type.String({ description: "Optional replacement task title" })),
@@ -121,7 +124,7 @@ interface TaskCreateToolParams {
 
 interface TaskUpdateToolParams {
   taskId: TaskId;
-  scheduledDate?: string;
+  scheduledDate?: string | null;
   title?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
@@ -236,7 +239,7 @@ const createTaskUpdateToolDefinition = ({
   promptGuidelines: [
     "Use this tool for backend task updates in normal chat.",
     "Supported fields are title, status, priority, description, labels, scheduledDate, and actor-based assignee updates.",
-    "Use scheduledDate to set or change the planned date (YYYY-MM-DD) or ISO timestamp. Omit it to preserve the current schedule. Empty strings and null are not supported.",
+    "Use scheduledDate to set or change the planned date (YYYY-MM-DD) or ISO timestamp. Use null or an empty string to remove the scheduled date. Omit it to preserve the current schedule.",
     "Use labels to add labels to the existing task labels.",
     "Use removeLabels when labels should be removed from the existing task labels.",
     "Use assigneeActorIds to replace the full assignee list. An empty list explicitly clears all assignees.",
@@ -479,7 +482,7 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
   };
 
   if (params.scheduledDate !== undefined) {
-    input.scheduledDate = normalizeTaskScheduledDate(params.scheduledDate);
+    input.scheduledDate = normalizeTaskScheduledDateUpdate(params.scheduledDate);
   }
 
   if (hasOwn(params, "title")) {
@@ -563,7 +566,7 @@ const resolveUpdateTaskInput = async (
   };
 
   if (params.scheduledDate !== undefined) {
-    baseInput.scheduledDate = normalizeTaskScheduledDate(params.scheduledDate);
+    baseInput.scheduledDate = normalizeTaskScheduledDateUpdate(params.scheduledDate);
   }
 
   if (hasOwn(params, "title")) {
@@ -731,7 +734,9 @@ const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): stri
     input.title !== undefined ? `title=${JSON.stringify(input.title)}` : null,
     input.status !== undefined ? `status=${input.status}` : null,
     input.priority !== undefined ? `priority=${input.priority}` : null,
-    input.scheduledDate !== undefined ? `scheduledDate=${input.scheduledDate}` : null,
+    input.scheduledDate !== undefined
+      ? `scheduledDate=${input.scheduledDate === null ? "cleared" : input.scheduledDate}`
+      : null,
     hasOwn(input, "description")
       ? `description=${input.description === null ? "cleared" : "updated"}`
       : null,

@@ -13,3 +13,11 @@ export const normalizeTaskScheduledDate = (value: string): string => {
 
   return scheduledDate;
 };
+
+/** Clearing is explicit and distinct from omitting a mutation field. */
+export const normalizeTaskScheduledDateUpdate = (value: string | null): string | null => {
+  if (value === null || (typeof value === "string" && value.trim().length === 0)) {
+    return null;
+  }
+  return normalizeTaskScheduledDate(value);
+};
