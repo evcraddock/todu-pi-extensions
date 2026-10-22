@@ -63,13 +63,15 @@ Use the extension inside pi with commands such as:
 
 - `/tasks` to browse and filter tasks
 - `/task` to inspect the current task or a task by ID
-- `/task-new` to create a task
+- `/task-new` to create a task, optionally with a scheduled date
 - `/task-clear` to clear the current task context
 - `/todu-status` to show Todu daemon and sync server status
 
 The package also exposes agent tools for structured task operations such as listing tasks, showing task details, and creating or updating tasks.
 
 For status-only `task_update` calls, omit assignee parameters or use `null`. `assigneeActorIds: []` explicitly clears all assignees; empty add/remove lists are no-ops. See [task update assignee parameters](docs/task-update-assignees.md) for details.
+
+`task_create` and `task_update` accept an optional `scheduledDate` (for example, `2026-11-01`). Omit it to create an unscheduled task or leave an existing schedule unchanged. `/task-new` also prompts for an optional scheduled date; blank skips scheduling and Escape cancels creation.
 
 Task list/detail data preserves backend due, scheduled, creation, and update dates. Populated due dates also appear in tool text. See [task date meanings and missing-value behavior](docs/task-dates.md).
 

@@ -1210,6 +1210,7 @@ const mapTaskFilter = (filter: TaskFilter): Record<string, unknown> => {
 
 const mapCreateTaskInput = (input: CreateTaskInput): Record<string, unknown> => ({
   title: input.title,
+  ...(input.scheduledDate !== undefined ? { scheduledDate: input.scheduledDate } : {}),
   description: input.description ?? undefined,
   projectId: input.projectId ?? undefined,
   labels: input.labels,
@@ -1234,6 +1235,7 @@ const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, u
 
 const mapUpdateTaskInput = (input: UpdateTaskInput): Record<string, unknown> => ({
   title: input.title ?? undefined,
+  ...(input.scheduledDate !== undefined ? { scheduledDate: input.scheduledDate } : {}),
   status: input.status ? toRemoteTaskStatus(input.status) : undefined,
   priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
   description: input.description ?? undefined,

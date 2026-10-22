@@ -13,7 +13,15 @@
 
 The extension does not substitute the current time, an epoch, a sentinel date, or the scheduled date for missing values. Creation/update timestamps are required by the typed backend contract; an absent timestamp is an out-of-contract response, not an undated task. This change does not add runtime validation of daemon response shapes or synthesize missing timestamps.
 
-The shared summary mapper also serves create/update/move result mapping, so returned dates survive those paths without adding date mutation parameters. This task does not implement setting or clearing dates.
+The shared summary mapper also serves create/update/move result mapping, so returned dates survive those paths.
+
+## Setting a scheduled date
+
+`task_create` and `task_update` accept an optional `scheduledDate` string. Use a calendar date such as `2026-11-01` or a backend-compatible ISO timestamp such as `2026-11-01T09:00:00-06:00`. Input is trimmed and checked with the installed backend's `validateISODate`; the date or timestamp is passed to the daemon without timezone conversion or reformatting. A scheduled-date-only update is supported, including updates combined with label or assignee changes.
+
+Omitting the field creates an unscheduled task or leaves an existing task's schedule unchanged. Empty strings and `null` are rejected; clearing scheduled dates and setting due dates are not part of this mutation surface.
+
+`/task-new` prompts for a scheduled date after task authoring and before submission. Leave the field blank to skip scheduling; Escape cancels creation without writing a task. Invalid values show a warning and re-prompt. Setting or changing an existing schedule is available through `task_update`; the task-detail menu is unchanged.
 
 ## Preserve date meaning
 

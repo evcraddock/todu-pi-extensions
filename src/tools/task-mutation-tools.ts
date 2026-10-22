@@ -25,12 +25,19 @@ import type {
 } from "../services/task-service";
 import type { ProjectService } from "../services/project-service";
 import { ToduTaskServiceError } from "../services/todu/todu-task-service";
+import { normalizeTaskScheduledDate } from "../utils/task-scheduled-date";
 
 const TASK_STATUS_VALUES = ["active", "inprogress", "waiting", "done", "cancelled"] as const;
 const TASK_PRIORITY_VALUES = ["low", "medium", "high"] as const;
 
 const TaskCreateParams = Type.Object({
   title: Type.String({ description: "Task title" }),
+  scheduledDate: Type.Optional(
+    Type.String({
+      description:
+        "Optional scheduled date (YYYY-MM-DD or ISO timestamp). Omit for no scheduled date.",
+    })
+  ),
   projectId: Type.String({ description: "Project ID or unique project name for the new task" }),
   description: Type.Optional(Type.String({ description: "Optional task description" })),
   labels: Type.Optional(
@@ -42,6 +49,12 @@ const TaskCreateParams = Type.Object({
 
 const TaskUpdateParams = Type.Object({
   taskId: Type.String({ description: "Task ID" }),
+  scheduledDate: Type.Optional(
+    Type.String({
+      description:
+        "Optional replacement scheduled date (YYYY-MM-DD or ISO timestamp). Omit to leave unchanged.",
+    })
+  ),
   title: Type.Optional(Type.String({ description: "Optional replacement task title" })),
   status: Type.Optional(
     stringEnum(TASK_STATUS_VALUES, { description: "Optional next task status" })
@@ -100,6 +113,7 @@ const TaskMoveParams = Type.Object({
 
 interface TaskCreateToolParams {
   title: string;
+  scheduledDate?: string;
   projectId: string;
   description?: string;
   labels?: string[];
@@ -107,6 +121,7 @@ interface TaskCreateToolParams {
 
 interface TaskUpdateToolParams {
   taskId: TaskId;
+  scheduledDate?: string;
   title?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
@@ -175,13 +190,15 @@ interface TaskMutationToolDependencies {
 const createTaskCreateToolDefinition = ({ getTaskService }: TaskMutationToolDependencies) => ({
   name: "task_create",
   label: "Task Create",
-  description: "Create a task with a title, project reference, and optional description or labels.",
+  description:
+    "Create a task with a title, project reference, and optional description, labels, or scheduled date.",
   promptSnippet: "Create a task when the title and project reference are known.",
   promptGuidelines: [
     "Use this tool for backend task creation in normal chat instead of interactive slash-command flows.",
     "Provide an explicit project ID when known.",
     "If only a project name is available, pass the exact unique project name so the tool can resolve it.",
     "Use labels to tag the task during creation when needed.",
+    "Use scheduledDate to set a planned date (YYYY-MM-DD) or ISO timestamp; omit it for an unscheduled task.",
     "Do not guess project identity.",
   ],
   parameters: TaskCreateParams,
@@ -213,11 +230,13 @@ const createTaskUpdateToolDefinition = ({
 }: TaskMutationToolDependencies) => ({
   name: "task_update",
   label: "Task Update",
-  description: "Update a task's title, status, priority, description, labels, or assignees.",
+  description:
+    "Update a task's title, status, priority, description, labels, assignees, or scheduled date.",
   promptSnippet: "Update a task's supported metadata, label, and assignee fields by task ID.",
   promptGuidelines: [
     "Use this tool for backend task updates in normal chat.",
-    "Supported fields are title, status, priority, description, labels, and actor-based assignee updates.",
+    "Supported fields are title, status, priority, description, labels, scheduledDate, and actor-based assignee updates.",
+    "Use scheduledDate to set or change the planned date (YYYY-MM-DD) or ISO timestamp. Omit it to preserve the current schedule. Empty strings and null are not supported.",
     "Use labels to add labels to the existing task labels.",
     "Use removeLabels when labels should be removed from the existing task labels.",
     "Use assigneeActorIds to replace the full assignee list. An empty list explicitly clears all assignees.",
@@ -401,6 +420,9 @@ const registerTaskMutationTools = (
 
 const normalizeCreateTaskInput = (params: TaskCreateToolParams): CreateTaskInput => ({
   title: normalizeRequiredText(params.title, "title"),
+  ...(params.scheduledDate !== undefined
+    ? { scheduledDate: normalizeTaskScheduledDate(params.scheduledDate) }
+    : {}),
   projectId: normalizeRequiredText(params.projectId, "projectId"),
   description: normalizeOptionalDescription(params, "description"),
   labels: hasOwn(params, "labels") ? normalizeLabelList(params.labels, "labels") : undefined,
@@ -456,6 +478,10 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     priority: params.priority,
   };
 
+  if (params.scheduledDate !== undefined) {
+    input.scheduledDate = normalizeTaskScheduledDate(params.scheduledDate);
+  }
+
   if (hasOwn(params, "title")) {
     input.title = normalizeRequiredText(params.title ?? "", "title");
   }
@@ -476,12 +502,13 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     input.title === undefined &&
     input.status === undefined &&
     input.priority === undefined &&
+    input.scheduledDate === undefined &&
     !hasOwn(input, "description") &&
     !hasOwn(input, "labels") &&
     !hasOwn(input, "assigneeActorIds")
   ) {
     throw new Error(
-      "task_update requires at least one supported field: title, status, priority, description, labels, or assigneeActorIds"
+      "task_update requires at least one supported field: title, status, priority, description, labels, assigneeActorIds, or scheduledDate"
     );
   }
 
@@ -534,6 +561,10 @@ const resolveUpdateTaskInput = async (
     status: params.status,
     priority: params.priority,
   };
+
+  if (params.scheduledDate !== undefined) {
+    baseInput.scheduledDate = normalizeTaskScheduledDate(params.scheduledDate);
+  }
 
   if (hasOwn(params, "title")) {
     baseInput.title = normalizeRequiredText(params.title ?? "", "title");
@@ -692,6 +723,7 @@ const formatTaskCreateContent = (task: TaskDetail): string =>
     `Status: ${task.status}`,
     `Priority: ${task.priority}`,
     `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
+    ...(task.scheduledDate ? [`Scheduled: ${task.scheduledDate}`] : []),
   ].join("\n");
 
 const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): string => {
@@ -699,6 +731,7 @@ const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): stri
     input.title !== undefined ? `title=${JSON.stringify(input.title)}` : null,
     input.status !== undefined ? `status=${input.status}` : null,
     input.priority !== undefined ? `priority=${input.priority}` : null,
+    input.scheduledDate !== undefined ? `scheduledDate=${input.scheduledDate}` : null,
     hasOwn(input, "description")
       ? `description=${input.description === null ? "cleared" : "updated"}`
       : null,
