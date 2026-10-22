@@ -81,7 +81,7 @@ After implementation is complete:
 2. push branch and open/update PR
 3. resolve CI if present
 4. run the `pr-review` skill
-5. report review result and stop for human merge approval
+5. report review result
 
 ## Conventions
 
