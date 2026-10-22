@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-22
+
+### Fixed
+
+- Allow task_update to remove scheduled dates using null or an empty string; omission preserves the existing schedule. (#140)
+
 ## [0.9.0] - 2026-10-21
 
 Adds scheduled dates to task creation and updates.
