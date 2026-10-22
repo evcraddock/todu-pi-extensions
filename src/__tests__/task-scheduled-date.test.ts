@@ -39,13 +39,14 @@ const task: TaskDetail = {
   descriptionApproval: null,
   comments: [],
   outboundAssigneeWarnings: [],
-  dueDate: null,
+  dueDate: "2030-12-31",
   scheduledDate: "2026-10-30",
   createdAt: "2026-10-22T00:00:00Z",
   updatedAt: "2026-10-22T00:00:00Z",
 };
 
 const createRuntime = () => {
+  let currentTask = { ...task };
   const request = vi.fn(async (method: string, params?: { input?: Record<string, unknown> }) => {
     const input = Object.fromEntries(
       Object.entries(params?.input ?? {}).filter(([, value]) => value !== undefined)
@@ -54,7 +55,10 @@ const createRuntime = () => {
       case "task.create":
         return { ok: true, value: { ...task, scheduledDate: undefined, ...input } };
       case "task.update":
-        return { ok: true, value: { ...task, ...input } };
+        currentTask = { ...currentTask, ...input };
+        return { ok: true, value: currentTask };
+      case "task.get":
+        return { ok: true, value: currentTask };
       case "project.get":
         return { ok: true, value: project };
       case "actor.list":
@@ -94,7 +98,13 @@ describe("scheduled-date mutation input", () => {
     });
   });
 
-  it.each(["", "   ", "not-a-date", "2026-99-99"])("rejects invalid date %j", (date) => {
+  it.each(["", "   "])("rejects blank date %j for creation", (date) => {
+    expect(() =>
+      normalizeCreateTaskInput({ title: task.title, projectId: project.id, scheduledDate: date })
+    ).toThrow("scheduledDate");
+  });
+
+  it.each(["not-a-date", "2026-99-99"])("rejects invalid date %j", (date) => {
     expect(() =>
       normalizeCreateTaskInput({ title: task.title, projectId: project.id, scheduledDate: date })
     ).toThrow("scheduledDate");
@@ -186,8 +196,8 @@ describe.each(["create", "update"] as const)("task_%s scheduled dates", (operati
     ).toThrow("Validation failed for tool");
   });
 
-  it.each([null, 123])(
-    "rejects non-string %j if execution bypasses schema validation",
+  it.each(operation === "create" ? [null, 123] : [123])(
+    "rejects invalid non-string %j if execution bypasses schema validation",
     async (date) => {
       const { request, taskService } = createRuntime();
       const deps = { getTaskService: vi.fn().mockResolvedValue(taskService) };
@@ -223,6 +233,57 @@ describe.each(["create", "update"] as const)("task_%s scheduled dates", (operati
       } as never)
     ).rejects.toThrow(`task_${operation} failed: scheduledDate`);
     expect(request).not.toHaveBeenCalled();
+  });
+});
+
+describe("removing an existing scheduled date", () => {
+  it.each([null, "", "   "])("clears %j through schema, tool, service and RPC", async (value) => {
+    const { request, taskService } = createRuntime();
+    const tool = createTaskUpdateToolDefinition({ getTaskService: async () => taskService });
+    const params = validateParams(tool, { taskId: task.id, scheduledDate: value });
+    const result = await tool.execute("clear-call", params as never);
+
+    expect(request).toHaveBeenCalledWith("task.update", {
+      id: task.id,
+      input: expect.objectContaining({ scheduledDate: null }),
+    });
+    expect(result.details.input.scheduledDate).toBeNull();
+    expect(result.details.task.scheduledDate).toBeNull();
+    expect(result.content[0]?.text).toContain("scheduledDate=cleared");
+    const stored = await taskService.getTask(task.id);
+    expect(stored?.scheduledDate).toBeNull();
+    expect(stored?.dueDate).toBe(task.dueDate);
+    expect(stored?.title).toBe(task.title);
+  });
+
+  it("preserves an existing date when the update omits scheduledDate", async () => {
+    const { taskService } = createRuntime();
+    const tool = createTaskUpdateToolDefinition({ getTaskService: async () => taskService });
+    const result = await tool.execute("rename", { taskId: task.id, title: "Renamed only" });
+    expect(result.details.input).not.toHaveProperty("scheduledDate");
+    expect(result.details.task.scheduledDate).toBe(task.scheduledDate);
+    expect((await taskService.getTask(task.id))?.scheduledDate).toBe(task.scheduledDate);
+  });
+
+  it.each([
+    { labels: ["new"], removeLabels: ["existing"] },
+    { addAssigneeActorIds: ["actor-new"] },
+    { removeAssigneeActorIds: ["actor-old"] },
+    { assigneeActorIds: [] },
+  ])("preserves an explicit clear alongside %j", async (otherFields) => {
+    const taskService = { getTask: vi.fn().mockResolvedValue(task) } as unknown as TaskService;
+    const result = await resolveUpdateTaskInput(taskService, {
+      taskId: task.id,
+      scheduledDate: null,
+      ...otherFields,
+    });
+    expect(result).toHaveProperty("scheduledDate", null);
+  });
+
+  it("rejects an empty update rather than interpreting omission as clearing", () => {
+    expect(() => normalizeUpdateTaskInput({ taskId: task.id })).toThrow(
+      "requires at least one supported field"
+    );
   });
 });
 

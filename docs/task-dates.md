@@ -19,7 +19,7 @@ The shared summary mapper also serves create/update/move result mapping, so retu
 
 `task_create` and `task_update` accept an optional `scheduledDate` string. Use a calendar date such as `2026-11-01` or a backend-compatible ISO timestamp such as `2026-11-01T09:00:00-06:00`. Input is trimmed and checked with the installed backend's `validateISODate`; the date or timestamp is passed to the daemon without timezone conversion or reformatting. A scheduled-date-only update is supported, including updates combined with label or assignee changes.
 
-Omitting the field creates an unscheduled task or leaves an existing task's schedule unchanged. Empty strings and `null` are rejected; clearing scheduled dates and setting due dates are not part of this mutation surface.
+Omitting the field creates an unscheduled task or leaves an existing task's schedule unchanged. To remove an existing schedule, use `task_update` with `scheduledDate: null` or `scheduledDate: ""`; blank update strings are normalized to `null`, which is sent explicitly through the daemon RPC. A clearing-only update is supported and reports `scheduledDate=cleared`. Creating a task with empty/null date input remains invalid; omit the date instead. Due-date mutations are unchanged.
 
 `/task-new` prompts for a scheduled date after task authoring and before submission. Leave the field blank to skip scheduling; Escape cancels creation without writing a task. Invalid values show a warning and re-prompt. Setting or changing an existing schedule is available through `task_update`; the task-detail menu is unchanged.
 
