@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-21
+
+Adds scheduled dates to task creation and updates.
+
+### Added
+
+- Support scheduledDate in task_create, task_update, and /task-new. (#139)
+
+### Fixed
+
+- Remove immediate registry verification that could fail successful releases. (#137)
+
+### Changed
+
+- Remove mandatory human merge approval from contributor instructions. (#138)
+
 ## [0.8.1] - 2026-10-21
 
 Prevents stale refreshes from restoring completed tasks in the current-task widget and footer.
