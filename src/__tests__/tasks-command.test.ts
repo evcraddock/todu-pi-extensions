@@ -64,7 +64,7 @@ const createCommandContext = () => ({
   ui: {
     notify: vi.fn(),
     setEditorText: vi.fn(),
-    input: vi.fn(),
+    input: vi.fn().mockResolvedValue(""),
     editor: vi.fn(),
     confirm: vi.fn().mockResolvedValue(false),
     custom: vi.fn(),
@@ -579,7 +579,8 @@ describe("createTaskNewCommandHandler", () => {
     context.ui.input = vi
       .fn()
       .mockResolvedValueOnce("   ")
-      .mockResolvedValueOnce("Implement /task-new");
+      .mockResolvedValueOnce("Implement /task-new")
+      .mockResolvedValueOnce("");
     const project = createProjectSummary();
     const createdTask = createTaskDetail({
       id: "task-new-1",

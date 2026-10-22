@@ -46,6 +46,7 @@ import {
   type TaskBrowseFilterContextController,
 } from "./task-browse-filter-context";
 import { createToduStatusCommandHandler } from "./todu-status-command";
+import { normalizeTaskScheduledDate } from "../utils/task-scheduled-date";
 
 const DEFAULT_TASK_BROWSE_FILTER_STATE: TaskBrowseFilterState = createTaskBrowseFilterState();
 
@@ -104,6 +105,7 @@ export interface RegisterCommandDependencies {
   getCurrentTaskId?: () => TaskId | null;
   clearCurrentTask?: (ctx: ExtensionCommandContext) => Promise<void>;
   promptTaskTitle?: (ctx: ExtensionCommandContext) => Promise<string | null>;
+  promptTaskScheduledDate?: (ctx: ExtensionCommandContext) => Promise<string | null | undefined>;
   selectTaskProject?: (
     ctx: ExtensionCommandContext,
     taskService: TaskService
@@ -373,6 +375,8 @@ const createTaskNewCommandHandler = (
   const getTaskService =
     dependencies.getTaskService ?? (() => getDefaultToduTaskServiceRuntime().ensureConnected());
   const promptTaskTitle = dependencies.promptTaskTitle ?? promptRequiredTaskTitle;
+  const promptTaskScheduledDate =
+    dependencies.promptTaskScheduledDate ?? promptOptionalTaskScheduledDate;
   const selectTaskProject = dependencies.selectTaskProject ?? selectProjectForTaskCreation;
   const editTaskExplanation = dependencies.editTaskExplanation ?? editNewTaskExplanation;
   const confirmTaskAuthoring = dependencies.confirmTaskAuthoring ?? confirmTaskAuthoringHelp;
@@ -493,6 +497,21 @@ const createTaskNewCommandHandler = (
       };
     }
 
+    let scheduledDate: string | undefined;
+    try {
+      const selectedDate = await promptTaskScheduledDate(ctx);
+      if (selectedDate === undefined) {
+        ctx.ui.notify("Task creation cancelled", "info");
+        return;
+      }
+      if (selectedDate !== null) {
+        scheduledDate = normalizeTaskScheduledDate(selectedDate);
+      }
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Failed to collect scheduled date"), "error");
+      return;
+    }
+
     let createdTask: TaskDetail;
     try {
       createdTask = await createTask(
@@ -501,6 +520,7 @@ const createTaskNewCommandHandler = (
           title: finalDraft.title,
           projectId: projectSelection.project.id,
           description: finalDraft.description,
+          ...(scheduledDate !== undefined ? { scheduledDate } : {}),
         }
       );
     } catch (error) {
@@ -1119,6 +1139,28 @@ const promptRequiredTaskTitle = async (ctx: ExtensionCommandContext): Promise<st
     }
 
     ctx.ui.notify("Task title is required", "warning");
+  }
+};
+
+const promptOptionalTaskScheduledDate = async (
+  ctx: ExtensionCommandContext
+): Promise<string | null | undefined> => {
+  while (true) {
+    const value = await ctx.ui.input(
+      "Scheduled date (optional)",
+      "YYYY-MM-DD or ISO timestamp; leave blank for no scheduled date"
+    );
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value.trim().length === 0) {
+      return null;
+    }
+    try {
+      return normalizeTaskScheduledDate(value);
+    } catch (error) {
+      ctx.ui.notify(formatTasksCommandError(error, "Invalid scheduled date"), "warning");
+    }
   }
 };
 

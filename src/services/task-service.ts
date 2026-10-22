@@ -11,6 +11,7 @@ import type {
 
 export interface CreateTaskInput {
   title: string;
+  scheduledDate?: string;
   description?: string | null;
   projectId?: string | null;
   labels?: string[];
@@ -18,6 +19,7 @@ export interface CreateTaskInput {
 
 export interface UpdateTaskInput {
   taskId: TaskId;
+  scheduledDate?: string;
   title?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
