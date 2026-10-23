@@ -5,12 +5,18 @@ import type {
   TaskSummary,
 } from "../../domain/task";
 import type { TaskService } from "../task-service";
-import { ToduDaemonClientError, type ToduDaemonClient } from "./daemon-client";
+import {
+  ToduDaemonClientError,
+  type TaskMutationOutcome,
+  type ToduDaemonClient,
+} from "./daemon-client";
+import { withEnrichmentWarning } from "./task-enrichment";
 
 export class ToduTaskServiceError extends Error {
   readonly operation: string;
   readonly causeCode: string;
   readonly details?: Record<string, unknown>;
+  readonly mutationOutcome?: TaskMutationOutcome;
 
   constructor(options: {
     operation: string;
@@ -18,12 +24,14 @@ export class ToduTaskServiceError extends Error {
     message: string;
     details?: Record<string, unknown>;
     cause?: unknown;
+    mutationOutcome?: TaskMutationOutcome;
   }) {
     super(options.message, options.cause ? { cause: options.cause } : undefined);
     this.name = "ToduTaskServiceError";
     this.operation = options.operation;
     this.causeCode = options.causeCode;
     this.details = options.details;
+    this.mutationOutcome = options.mutationOutcome;
   }
 }
 
@@ -46,12 +54,12 @@ const createToduTaskService = ({ client }: ToduTaskServiceDependencies): TaskSer
   createTask: (input) =>
     runTaskServiceOperation("createTask", async () => {
       const task = await client.createTask(input);
-      return hydrateTaskDetailProjectName(client, task);
+      return hydrateTaskDetailMetadataFromClient({ client, task, confirmedMutation: true });
     }),
   updateTask: (input) =>
     runTaskServiceOperation("updateTask", async () => {
       const task = await client.updateTask(input);
-      return hydrateTaskDetailProjectName(client, task);
+      return hydrateTaskDetailMetadataFromClient({ client, task, confirmedMutation: true });
     }),
   addTaskComment: (input) =>
     runTaskServiceOperation("addTaskComment", () => client.addTaskComment(input)),
@@ -59,7 +67,11 @@ const createToduTaskService = ({ client }: ToduTaskServiceDependencies): TaskSer
   moveTask: (input) =>
     runTaskServiceOperation("moveTask", async () => {
       const result = await client.moveTask(input);
-      const targetTask = await hydrateTaskDetailProjectName(client, result.targetTask);
+      const targetTask = await hydrateTaskDetailMetadataFromClient({
+        client,
+        task: result.targetTask,
+        confirmedMutation: true,
+      });
       return { ...result, targetTask };
     }),
   listProjects: () => runTaskServiceOperation("listProjects", () => client.listProjects()),
@@ -86,13 +98,48 @@ const listTasksWithProjectNames = async (
   );
 };
 
-const hydrateTaskDetailProjectName = async (
+const hydrateTaskDetailProjectName = (
   client: ToduDaemonClient,
   task: TaskDetail
-): Promise<TaskDetail> => {
+): Promise<TaskDetail> => hydrateTaskDetailMetadataFromClient({ client, task });
+
+interface HydrateTaskDetailOptions {
+  client: ToduDaemonClient;
+  task: TaskDetail;
+  confirmedMutation?: boolean;
+}
+
+const hydrateTaskDetailMetadataFromClient = async ({
+  client,
+  task,
+  confirmedMutation = false,
+}: HydrateTaskDetailOptions): Promise<TaskDetail> => {
   const [project, actors] = await Promise.all([
-    task.projectId ? client.getProject(task.projectId) : Promise.resolve(null),
-    listActorsBestEffort(client),
+    (async () => {
+      try {
+        const project = task.projectId ? await client.getProject(task.projectId) : null;
+        if (confirmedMutation && task.projectId && !project) {
+          task = withEnrichmentWarning(task, "project");
+        }
+        return project;
+      } catch (error) {
+        if (!confirmedMutation) {
+          throw error;
+        }
+        task = withEnrichmentWarning(task, "project");
+        return null;
+      }
+    })(),
+    (async () => {
+      try {
+        return await client.listActors();
+      } catch {
+        if (confirmedMutation) {
+          task = withEnrichmentWarning(task, "actors");
+        }
+        return [];
+      }
+    })(),
   ]);
 
   const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
@@ -106,9 +153,11 @@ const hydrateTaskDetailProjectName = async (
     actorMap,
     warningResult.unavailable ? task.outboundAssigneeWarnings : warningResult.warnings
   );
-  return warningResult.unavailable
-    ? { ...hydrated, outboundAssigneeWarningsUnavailable: true }
-    : hydrated;
+  if (!warningResult.unavailable) {
+    return hydrated;
+  }
+  const incomplete = { ...hydrated, outboundAssigneeWarningsUnavailable: true };
+  return confirmedMutation ? withEnrichmentWarning(incomplete, "integration-warnings") : incomplete;
 };
 
 const listActorsBestEffort = async (client: ToduDaemonClient) => {
@@ -216,8 +265,12 @@ const runTaskServiceOperation = async <T>(
       throw new ToduTaskServiceError({
         operation,
         causeCode: error.code,
-        message: `${operation} failed: ${error.message}`,
+        message:
+          error.mutationOutcome === "uncertain"
+            ? `${operation} outcome unknown: ${error.message}`
+            : `${operation} failed: ${error.message}`,
         details: error.details,
+        mutationOutcome: error.mutationOutcome,
         cause: error,
       });
     }

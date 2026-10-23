@@ -14,6 +14,44 @@ import type { ToduDaemonConfig } from "@/services/todu/daemon-config";
 import type { ToduDaemonEventName } from "@/services/todu/daemon-events";
 
 describe("createToduDaemonConnection", () => {
+  it("marks requests rejected before dispatch when disconnected", async () => {
+    const manager = createTestConnection(createSocketPath());
+    await expect(manager.request("task.create")).resolves.toMatchObject({
+      ok: false,
+      error: { requestState: "not-dispatched" },
+    });
+  });
+
+  it.each(["timeout", "disconnect", "reject"] as const)(
+    "records local dispatch evidence for %s without replaying writes",
+    async (behavior) => {
+      const socketPath = createSocketPath();
+      const daemon = createMockDaemonServer(socketPath, behavior);
+      await daemon.start();
+      const manager = createTestConnection(socketPath);
+      try {
+        await manager.connect();
+        const result = await manager.request("task.create", { input: { title: "one write" } });
+        expect(result).toMatchObject({
+          ok: false,
+          error: {
+            requestState: behavior === "reject" ? "rejected" : "dispatched",
+            code: behavior === "disconnect" ? "DAEMON_UNAVAILABLE" : "TIMEOUT",
+          },
+        });
+        // Reconnect is allowed; mutation replay is not.
+        if (behavior === "disconnect") {
+          await waitForCondition(() => manager.getState().status === "connected", "reconnected");
+        }
+        expect(daemon.methodCalls.filter((method) => method === "task.create")).toEqual([
+          "task.create",
+        ]);
+      } finally {
+        await manager.disconnect();
+        await daemon.stop();
+      }
+    }
+  );
   it("connects, performs daemon.hello, and exposes connected state", async () => {
     const socketPath = createSocketPath();
     const daemon = createMockDaemonServer(socketPath);
@@ -138,7 +176,10 @@ interface MockDaemonServer {
   dispatchEvent(event: ToduDaemonEventName, payload: unknown): void;
 }
 
-const createMockDaemonServer = (socketPath: string): MockDaemonServer => {
+const createMockDaemonServer = (
+  socketPath: string,
+  mutationBehavior?: "timeout" | "disconnect" | "reject"
+): MockDaemonServer => {
   let server: net.Server | null = null;
   const sockets = new Set<Socket>();
   const methodCalls: string[] = [];
@@ -205,6 +246,23 @@ const createMockDaemonServer = (socketPath: string): MockDaemonServer => {
                   },
                 })}\n`
               );
+              continue;
+            }
+
+            if (frame.method === "task.create" && mutationBehavior) {
+              if (mutationBehavior === "disconnect") socket.destroy();
+              if (mutationBehavior === "reject") {
+                socket.write(
+                  `${JSON.stringify({
+                    id: frame.id,
+                    error: {
+                      code: "TIMEOUT",
+                      message: "Backend rejection",
+                      requestState: "not-dispatched",
+                    },
+                  })}\n`
+                );
+              }
               continue;
             }
 

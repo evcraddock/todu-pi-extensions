@@ -81,6 +81,7 @@ import type {
   UpdateTaskInput,
 } from "../task-service";
 import type { ToduDaemonConnection, ToduDaemonConnectionError } from "./daemon-connection";
+import { withEnrichmentWarning } from "./task-enrichment";
 import type {
   ToduDaemonEvent,
   ToduDaemonEventListener,
@@ -95,24 +96,30 @@ export type ToduDaemonClientErrorCode =
   | "precondition-failed"
   | "unavailable"
   | "timeout"
+  | "uncertain"
   | "internal";
+
+export type TaskMutationOutcome = "rejected" | "not-dispatched" | "uncertain";
 
 export class ToduDaemonClientError extends Error {
   readonly code: ToduDaemonClientErrorCode;
   readonly method: string;
   readonly details?: Record<string, unknown>;
+  readonly mutationOutcome?: TaskMutationOutcome;
 
   constructor(options: {
     code: ToduDaemonClientErrorCode;
     method: string;
     message: string;
     details?: Record<string, unknown>;
+    mutationOutcome?: TaskMutationOutcome;
   }) {
     super(options.message);
     this.name = "ToduDaemonClientError";
     this.code = options.code;
     this.method = options.method;
     this.details = options.details;
+    this.mutationOutcome = options.mutationOutcome;
   }
 }
 
@@ -228,33 +235,21 @@ const createToduDaemonClient = ({
   },
 
   async createTask(input: CreateTaskInput): Promise<TaskDetail> {
-    const taskResult = await connection.request<ToduTaskWithDetailWithActorFields>("task.create", {
-      input: mapCreateTaskInput(input),
+    const task = await requestTaskMutation({
+      connection,
+      method: "task.create",
+      params: { input: mapCreateTaskInput(input) },
     });
-    if (!taskResult.ok) {
-      throw mapDaemonErrorToClientError("task.create", taskResult.error);
-    }
-
-    const actorMap = hasActorBackedTaskAssignments([taskResult.value])
-      ? buildActorMap(await listActorsBestEffort(connection))
-      : new Map<string, ActorSummary>();
-    return mapTaskDetail(taskResult.value, [], actorMap);
+    return enrichMutatedTask({ connection, rawTask: task, loadComments: false });
   },
 
   async updateTask(input: UpdateTaskInput): Promise<TaskDetail> {
-    const taskResult = await connection.request<ToduTaskWithDetailWithActorFields>("task.update", {
-      id: input.taskId,
-      input: mapUpdateTaskInput(input),
+    const task = await requestTaskMutation({
+      connection,
+      method: "task.update",
+      params: { id: input.taskId, input: mapUpdateTaskInput(input) },
     });
-    if (!taskResult.ok) {
-      throw mapDaemonErrorToClientError("task.update", taskResult.error);
-    }
-
-    const comments = await fetchTaskComments(connection, input.taskId);
-    const actorMap = shouldLoadTaskActors(taskResult.value, comments)
-      ? buildActorMap(await listActorsBestEffort(connection))
-      : new Map<string, ActorSummary>();
-    return mapTaskDetail(taskResult.value, comments, actorMap);
+    return enrichMutatedTask({ connection, rawTask: task, loadComments: true });
   },
 
   async addTaskComment(input: AddTaskCommentInput): Promise<TaskComment> {
@@ -288,21 +283,14 @@ const createToduDaemonClient = ({
   },
 
   async moveTask(input: MoveTaskInput): Promise<MoveTaskResult> {
-    const result = await connection.request<ToduTaskWithDetailWithActorFields>("task.move", {
-      id: input.taskId,
-      targetProjectId: input.targetProjectId,
+    const task = await requestTaskMutation({
+      connection,
+      method: "task.move",
+      params: { id: input.taskId, targetProjectId: input.targetProjectId },
     });
-    if (!result.ok) {
-      throw mapDaemonErrorToClientError("task.move", result.error);
-    }
-
-    const comments = await fetchTaskComments(connection, result.value.id);
-    const actorMap = shouldLoadTaskActors(result.value, comments)
-      ? buildActorMap(await listActorsBestEffort(connection))
-      : new Map<string, ActorSummary>();
     return {
       sourceTaskId: input.taskId,
-      targetTask: mapTaskDetail(result.value, comments, actorMap),
+      targetTask: await enrichMutatedTask({ connection, rawTask: task, loadComments: true }),
     };
   },
 
@@ -726,6 +714,99 @@ const createToduDaemonClient = ({
     });
   },
 });
+
+// Only the dispatch itself can produce an uncertain write outcome. Follow-up reads
+// must never change an acknowledged mutation into a failed/uncertain mutation.
+interface RequestTaskMutationOptions {
+  connection: Pick<ToduDaemonConnection, "request">;
+  method: "task.create" | "task.update" | "task.move";
+  params: Record<string, unknown>;
+}
+
+const requestTaskMutation = async ({
+  connection,
+  method,
+  params,
+}: RequestTaskMutationOptions): Promise<ToduTaskWithDetailWithActorFields> => {
+  let result;
+  try {
+    result = await connection.request<ToduTaskWithDetailWithActorFields>(method, params);
+  } catch {
+    throw uncertainTaskMutationError(method);
+  }
+  if (result.ok) {
+    return result.value;
+  }
+
+  const state = result.error.requestState;
+  if (
+    state === "dispatched" ||
+    (state === undefined &&
+      ["TIMEOUT", "DAEMON_UNAVAILABLE", "BAD_RESPONSE"].includes(result.error.code))
+  ) {
+    throw uncertainTaskMutationError(method);
+  }
+  const error = mapDaemonErrorToClientError(method, result.error);
+  throw new ToduDaemonClientError({
+    code: error.code,
+    method,
+    message: error.message,
+    details: error.details,
+    mutationOutcome: state === "not-dispatched" ? "not-dispatched" : "rejected",
+  });
+};
+
+const uncertainTaskMutationError = (method: string): ToduDaemonClientError =>
+  new ToduDaemonClientError({
+    code: "uncertain",
+    method,
+    mutationOutcome: "uncertain",
+    message: `${method} outcome is unknown: the write may have committed. Verify backend state before retrying; cancellation or disconnect does not roll it back.`,
+  });
+
+interface EnrichMutatedTaskOptions {
+  connection: Pick<ToduDaemonConnection, "request">;
+  rawTask: ToduTaskWithDetailWithActorFields;
+  loadComments: boolean;
+}
+
+const enrichMutatedTask = async ({
+  connection,
+  rawTask,
+  loadComments,
+}: EnrichMutatedTaskOptions): Promise<TaskDetail> => {
+  let task = mapTaskDetail(rawTask, [], new Map());
+  let notes: ToduNoteWithActorFields[] = [];
+  if (loadComments) {
+    try {
+      const result = await connection.request<ToduNoteWithActorFields[]>("note.list", {
+        filter: { entityType: "task", entityId: rawTask.id },
+      });
+      if (!result.ok) {
+        throw mapDaemonErrorToClientError("note.list", result.error);
+      }
+      notes = result.value;
+    } catch {
+      task = withEnrichmentWarning(task, "comments");
+    }
+  }
+  let actorMap = new Map<string, ActorSummary>();
+  if (shouldLoadTaskActors(rawTask, notes)) {
+    try {
+      actorMap = buildActorMap(await listActors(connection));
+    } catch {
+      task = withEnrichmentWarning(task, "actors");
+    }
+  }
+  return {
+    ...task,
+    ...mapTaskDetail(
+      rawTask,
+      notes.map((note) => mapTaskComment(note, actorMap)),
+      actorMap
+    ),
+  };
+};
 
 const listRawTasks = async (
   connection: Pick<ToduDaemonConnection, "request">,

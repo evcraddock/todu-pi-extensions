@@ -22,6 +22,8 @@ export interface ToduDaemonConnectionError {
   code: string;
   message: string;
   details?: Record<string, unknown>;
+  /** Local dispatch evidence, never taken from daemon-provided error details. */
+  requestState?: "not-dispatched" | "dispatched" | "rejected";
 }
 
 export type ToduDaemonConnectionResult<T> =
@@ -213,7 +215,10 @@ class ToduDaemonConnectionManager implements ToduDaemonConnection {
     if (!this.activeConnection) {
       return {
         ok: false,
-        error: createDaemonUnavailableError(this.daemonConfig.socketPath, "NOT_CONNECTED"),
+        error: {
+          ...createDaemonUnavailableError(this.daemonConfig.socketPath, "NOT_CONNECTED"),
+          requestState: "not-dispatched",
+        },
       };
     }
 
@@ -395,7 +400,10 @@ class ToduDaemonConnectionManager implements ToduDaemonConnection {
         connection.pending.delete(pending.id);
 
         if (parsedFrame.kind === "error") {
-          pending.resolve({ ok: false, error: parsedFrame.value.error });
+          pending.resolve({
+            ok: false,
+            error: { ...parsedFrame.value.error, requestState: "rejected" },
+          });
           continue;
         }
 
@@ -434,7 +442,10 @@ class ToduDaemonConnectionManager implements ToduDaemonConnection {
     if (connection.closed) {
       return {
         ok: false,
-        error: createDaemonUnavailableError(this.daemonConfig.socketPath, "CONNECTION_CLOSED"),
+        error: {
+          ...createDaemonUnavailableError(this.daemonConfig.socketPath, "CONNECTION_CLOSED"),
+          requestState: "not-dispatched",
+        },
       };
     }
 
@@ -445,7 +456,7 @@ class ToduDaemonConnectionManager implements ToduDaemonConnection {
         connection.pending.delete(id);
         resolve({
           ok: false,
-          error: createRequestTimeoutError(method, timeoutMs),
+          error: { ...createRequestTimeoutError(method, timeoutMs), requestState: "dispatched" },
         });
       }, timeoutMs);
 
@@ -465,11 +476,14 @@ class ToduDaemonConnectionManager implements ToduDaemonConnection {
         connection.pending.delete(id);
         resolve({
           ok: false,
-          error: mapUnknownToConnectionError(error, {
-            code: "DAEMON_UNAVAILABLE",
-            socketPath: this.daemonConfig.socketPath,
-            method,
-          }),
+          error: {
+            ...mapUnknownToConnectionError(error, {
+              code: "DAEMON_UNAVAILABLE",
+              socketPath: this.daemonConfig.socketPath,
+              method,
+            }),
+            requestState: "dispatched",
+          },
         });
       }
     });
@@ -552,9 +566,12 @@ class ToduDaemonConnectionManager implements ToduDaemonConnection {
       clearTimeout(pending.timeout);
       pending.resolve({
         ok: false,
-        error: createDaemonUnavailableError(this.daemonConfig.socketPath, "CONNECTION_CLOSED", {
-          method: pending.method,
-        }),
+        error: {
+          ...createDaemonUnavailableError(this.daemonConfig.socketPath, "CONNECTION_CLOSED", {
+            method: pending.method,
+          }),
+          requestState: "dispatched",
+        },
       });
     }
     connection.pending.clear();

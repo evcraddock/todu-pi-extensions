@@ -727,6 +727,7 @@ const formatTaskCreateContent = (task: TaskDetail): string =>
     `Priority: ${task.priority}`,
     `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
     ...(task.scheduledDate ? [`Scheduled: ${task.scheduledDate}`] : []),
+    ...formatEnrichmentWarnings(task),
   ].join("\n");
 
 const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): string => {
@@ -746,9 +747,11 @@ const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): stri
       : null,
   ].filter((value): value is string => value !== null);
 
-  return [`Updated task ${task.id}: ${task.title}`, `Changes: ${changedFields.join(", ")}`].join(
-    "\n"
-  );
+  return [
+    `Updated task ${task.id}: ${task.title}`,
+    `Changes: ${changedFields.join(", ")}`,
+    ...formatEnrichmentWarnings(task),
+  ].join("\n");
 };
 
 const formatTaskCommentCreateContent = (comment: TaskComment): string =>
@@ -771,10 +774,24 @@ const formatTaskMoveContent = (details: TaskMoveToolDetails): string => {
     `Moved task ${details.sourceTaskId} → ${target?.id ?? "unknown"}`,
     `Target project: ${projectLabel}`,
     `New task: ${target?.id}: ${target?.title}`,
+    ...(target ? formatEnrichmentWarnings(target) : []),
   ].join("\n");
 };
 
+const formatEnrichmentWarnings = (task: TaskDetail): string[] => {
+  const warnings = task.enrichmentWarnings ?? [];
+  return warnings.length > 0
+    ? [
+        "Mutation confirmed. Do not repeat the write because of missing enrichment.",
+        ...warnings.map((warning) => `Warning (${warning.source}): ${warning.message}`),
+      ]
+    : [];
+};
+
 const formatToolError = (error: unknown, prefix: string): string => {
+  if (error instanceof ToduTaskServiceError && error.mutationOutcome === "uncertain") {
+    return `${prefix.replace(/ failed$/, "")} outcome unknown: the write may have committed. Verify backend state before retrying; cancellation or disconnect does not roll it back.`;
+  }
   if (error instanceof Error && error.message.trim().length > 0) {
     return `${prefix}: ${error.message}`;
   }
