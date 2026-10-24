@@ -15,11 +15,25 @@ The extension does not substitute the current time, an epoch, a sentinel date, o
 
 The shared summary mapper also serves create/update/move result mapping, so returned dates survive those paths.
 
+## Setting a due date
+
+`task_update` accepts an optional `dueDate` string to set or change an existing task's deadline. For example:
+
+```json
+{ "taskId": "task-example", "dueDate": "November 1, 2026" }
+```
+
+Accepted forms are `YYYY-MM-DD`, `Month D, YYYY` (comma optional), and `D Month YYYY`. English month names are case-insensitive and may use their three-letter abbreviation, such as `1 Nov 2026`. A four-digit year from 0001 through 9999 is required. Surrounding whitespace and repeated spaces are tolerated. The tool checks actual calendar validity, including month lengths and Gregorian leap years, then sends the backend a normalized `YYYY-MM-DD` string. It does not infer a time or timezone.
+
+Ambiguous numeric dates (`11/01/2026`), missing years, relative phrases (`tomorrow`, `next Friday`), timestamps, blanks, and impossible dates (`2026-02-29`) return a contextual validation error before task reads or writes. Clarify unsupported input with the user rather than guessing a calendar date or discarding timestamp information. This stricter rule applies to new due-date tool input only; existing stored dates are not rewritten during reads.
+
+Omit `dueDate` to preserve the current deadline. Due-date-only updates and combinations with existing metadata, scheduled-date, label, and assignee updates are supported. Confirmed updates report `dueDate=YYYY-MM-DD` in readable output and retain the date in result details. Due-date clearing is not supported: do not pass null or blank as a clearing request. The schema expects a string; Pi may normalize an optional null to omission before execution, which preserves rather than clears the date. Due-date support is not added to `task_create`, `/task-new`, or the task-detail menu.
+
 ## Setting a scheduled date
 
 `task_create` and `task_update` accept an optional `scheduledDate` string. Use a calendar date such as `2026-11-01` or a backend-compatible ISO timestamp such as `2026-11-01T09:00:00-06:00`. Input is trimmed and checked with the installed backend's `validateISODate`; the date or timestamp is passed to the daemon without timezone conversion or reformatting. A scheduled-date-only update is supported, including updates combined with label or assignee changes.
 
-Omitting the field creates an unscheduled task or leaves an existing task's schedule unchanged. To remove an existing schedule, use `task_update` with `scheduledDate: null` or `scheduledDate: ""`; blank update strings are normalized to `null`, which is sent explicitly through the daemon RPC. A clearing-only update is supported and reports `scheduledDate=cleared`. Creating a task with empty/null date input remains invalid; omit the date instead. Due-date mutations are unchanged.
+Omitting the field creates an unscheduled task or leaves an existing task's schedule unchanged. To remove an existing schedule, use `task_update` with `scheduledDate: null` or `scheduledDate: ""`; blank update strings are normalized to `null`, which is sent explicitly through the daemon RPC. A clearing-only update is supported and reports `scheduledDate=cleared`. Creating a task with empty/null date input remains invalid; omit the date instead. Scheduled-date behavior remains independent of due-date updates.
 
 `/task-new` prompts for a scheduled date after task authoring and before submission. Leave the field blank to skip scheduling; Escape cancels creation without writing a task. Invalid values show a warning and re-prompt. Setting or changing an existing schedule is available through `task_update`; the task-detail menu is unchanged.
 
@@ -59,5 +73,7 @@ That representation check is not a complete calendar-date validator; use it only
 Codemode receives the structured envelope directly from `task_list` and `task_show`. Check `ok` before reading `data.tasks` or `data.task`; see [task read outputs](task-read-outputs.md) for a merge/deduplicate/sort example. No parsing-based workaround or next-actions workflow is introduced.
 
 ## Verification
+
+`src/__tests__/task-due-date.test.ts` covers normalized due-date inputs, calendar validity, invalid/ambiguous input without RPC calls, schema validation and host coercion, setting/changing/preserving due dates through the tool/service/RPC path, and combinations with other update fields.
 
 `src/__tests__/task-date-results.test.ts` covers populated, absent, undefined, and null optional dates; independent due/scheduled values; exact date-only and offset timestamp preservation; service enrichment and tool details/structured outputs; scheduled-date text and explicit unscheduled labels in both read tools; search results; unchanged TUI models; and caller-side merging/deduplication/sorting with nulls last. All RPC responses in these unit tests are mocked; they do not connect to or modify normal Todu data.

@@ -1319,6 +1319,7 @@ const mapUpdateProjectInput = (input: UpdateLocalProjectInput): Record<string, u
 
 const mapUpdateTaskInput = (input: UpdateTaskInput): Record<string, unknown> => ({
   title: input.title ?? undefined,
+  ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
   ...(input.scheduledDate !== undefined ? { scheduledDate: input.scheduledDate } : {}),
   status: input.status ? toRemoteTaskStatus(input.status) : undefined,
   priority: input.priority ? toRemoteTaskPriority(input.priority) : undefined,
