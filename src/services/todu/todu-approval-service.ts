@@ -1,11 +1,13 @@
 import type { ApprovalItem } from "../../domain/approval";
 import type { ApprovalService } from "../approval-service";
 import { ToduDaemonClientError, type ToduDaemonClient } from "./daemon-client";
+import type { ToduDaemonConnectionError } from "./daemon-connection";
 
 export class ToduApprovalServiceError extends Error {
   readonly operation: string;
   readonly causeCode: string;
   readonly details?: Record<string, unknown>;
+  readonly requestState?: ToduDaemonConnectionError["requestState"];
 
   constructor(options: {
     operation: string;
@@ -13,12 +15,14 @@ export class ToduApprovalServiceError extends Error {
     message: string;
     details?: Record<string, unknown>;
     cause?: unknown;
+    requestState?: ToduDaemonConnectionError["requestState"];
   }) {
     super(options.message, options.cause ? { cause: options.cause } : undefined);
     this.name = "ToduApprovalServiceError";
     this.operation = options.operation;
     this.causeCode = options.causeCode;
     this.details = options.details;
+    this.requestState = options.requestState;
   }
 }
 
@@ -52,6 +56,7 @@ const runApprovalServiceOperation = async <TResult>(
         causeCode: error.code,
         message: `${operation} failed: ${error.message}`,
         details: error.details,
+        requestState: error.requestState,
         cause: error,
       });
     }

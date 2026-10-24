@@ -2,6 +2,20 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { stringEnum } from "./string-enum";
+import {
+  IntegrationListDataSchema,
+  IntegrationShowDataSchema,
+  IntegrationUpdateDataSchema,
+} from "./trust-tool-schemas";
+import {
+  classifyTrustToolError,
+  createTrustResultBuilder,
+  optionalTrustRead,
+  projectTrustData,
+  TrustToolInputError,
+  type TrustToolWarning,
+} from "./trust-tool-results";
+import { projectBinding, projectBindingStatus } from "./trust-tool-projections";
 
 import type { ActorSummary } from "../domain/actor";
 import type { TaskSummary } from "../domain/task";
@@ -15,6 +29,19 @@ import type {
 } from "../services/project-integration-service";
 import type { ProjectService } from "../services/project-service";
 import type { TaskService } from "../services/task-service";
+
+const integrationListResult = createTrustResultBuilder(
+  IntegrationListDataSchema,
+  "integration_list"
+);
+const integrationShowResult = createTrustResultBuilder(
+  IntegrationShowDataSchema,
+  "integration_show"
+);
+const integrationUpdateResult = createTrustResultBuilder(
+  IntegrationUpdateDataSchema,
+  "integration_update"
+);
 
 const INTEGRATION_STRATEGY_VALUES = ["bidirectional", "pull", "push", "none"] as const;
 
@@ -88,31 +115,39 @@ const createIntegrationListToolDefinition = ({
   description: "List integration bindings and their high-level state.",
   promptSnippet: "List integration bindings and sync state.",
   parameters: IntegrationListParams,
+  outputSchema: integrationListResult.outputSchema,
   async execute(_toolCallId: string, params: IntegrationBindingFilter) {
+    const filter = projectTrustData(() => normalizeIntegrationFilter(params));
+    let raw: IntegrationBinding[];
     try {
-      const integrationService = await getProjectIntegrationService();
-      const bindings = await integrationService.listIntegrationBindings(
-        normalizeIntegrationFilter(params)
-      );
-      const projectNameMap = await buildProjectNameMap(getProjectService);
-
-      const details: IntegrationListToolDetails = {
-        kind: "integration_list",
-        filter: normalizeIntegrationFilter(params),
-        bindings,
-        total: bindings.length,
-        empty: bindings.length === 0,
-      };
-
-      return {
-        content: [
-          { type: "text" as const, text: formatIntegrationListContent(bindings, projectNameMap) },
-        ],
-        details,
-      };
+      raw = await (await getProjectIntegrationService()).listIntegrationBindings(filter);
     } catch (error) {
-      throw new Error(formatToolError(error, "integration_list failed"), { cause: error });
+      const status = classifyTrustToolError({ error, tool: "integration_list" });
+      return integrationListResult.failure({
+        status: status === "not_found" ? "backend_error" : status,
+      });
     }
+    const bindings = projectTrustData(() => raw.map(projectBinding));
+    const warnings: TrustToolWarning[] = [];
+    const projectNameMap = await readProjectNames(getProjectService, warnings);
+    const details: IntegrationListToolDetails = {
+      kind: "integration_list",
+      filter,
+      bindings,
+      total: bindings.length,
+      empty: bindings.length === 0,
+    };
+    const projectIds = new Set(bindings.map((binding) => binding.projectId));
+    const projectNames = [...projectNameMap]
+      .filter(([id]) => projectIds.has(id))
+      .map(([id, name]) => ({ id, name }));
+    return integrationListResult.success({
+      data: { filter, bindings, projectNames, total: details.total, empty: details.empty },
+      details,
+      empty: details.empty,
+      warnings,
+      text: projectTrustData(() => formatIntegrationListContent(bindings, projectNameMap)),
+    });
   },
 });
 
@@ -128,60 +163,124 @@ const createIntegrationShowToolDefinition = ({
     "Show integration binding details, mappings, trust state, and unmapped assignee warnings.",
   promptSnippet: "Inspect binding-local actor mappings, trust state, and warning summaries.",
   parameters: IntegrationShowParams,
+  outputSchema: integrationShowResult.outputSchema,
   async execute(_toolCallId: string, params: { bindingId: string }) {
-    const bindingId = normalizeRequiredText(params.bindingId, "bindingId");
-
+    const bindingId = params.bindingId.trim();
+    if (!bindingId) return integrationShowResult.failure({ status: "validation_error" });
+    const target = { entityType: "integration" as const, entityId: bindingId };
+    let integrationService: ProjectIntegrationService;
     try {
-      const integrationService = await getProjectIntegrationService();
-      const binding = await integrationService.getIntegrationBinding(bindingId);
-      if (!binding) {
-        const details: IntegrationShowToolDetails = {
-          kind: "integration_show",
-          bindingId,
-          found: false,
-        };
-
-        return {
-          content: [{ type: "text" as const, text: `Integration binding not found: ${bindingId}` }],
-          details,
-        };
-      }
-
-      const [status, projectNameMap, actors, tasks] = await Promise.all([
-        integrationService.getIntegrationBindingStatus(bindingId),
-        buildProjectNameMap(getProjectService),
-        listActorsBestEffort(getActorService),
-        listProjectTasksBestEffort(getTaskService, binding.projectId),
-      ]);
-      const taskWarnings = buildTaskMappingWarnings(binding, tasks, actors);
-
+      integrationService = await getProjectIntegrationService();
+    } catch (error) {
+      const status = classifyTrustToolError({ error, tool: "integration_show" });
+      return integrationShowResult.failure({
+        status: status === "not_found" ? "backend_error" : status,
+      });
+    }
+    let raw: IntegrationBinding | null;
+    try {
+      raw = await integrationService.getIntegrationBinding(bindingId);
+    } catch (error) {
+      return integrationShowResult.failure({
+        status: classifyTrustToolError({ error, tool: "integration_show" }),
+        target,
+      });
+    }
+    if (raw === null) {
       const details: IntegrationShowToolDetails = {
         kind: "integration_show",
         bindingId,
-        found: true,
+        found: false,
+      };
+      return integrationShowResult.failure({
+        status: "not_found",
+        target,
+        details,
+        text: `Integration binding not found: ${bindingId}`,
+      });
+    }
+    const binding = projectTrustData(() => projectBinding(raw));
+    const warnings: TrustToolWarning[] = [];
+    const [rawStatus, projectNameMap, actors, tasks] = await Promise.all([
+      optionalTrustRead({
+        read: () => integrationService.getIntegrationBindingStatus(bindingId),
+        fallback: null,
+        warnings,
+        code: "status_unavailable",
+        message: "Integration status is unavailable; binding details remain available.",
+      }),
+      readProjectNames(getProjectService, warnings),
+      optionalTrustRead({
+        read: getActorService
+          ? async () =>
+              (await (await getActorService()).listActors()).map(
+                ({ id, displayName, archived }) => ({ id, displayName, archived })
+              )
+          : undefined,
+        fallback: [] as ActorSummary[],
+        warnings,
+        code: "actors_unavailable",
+        message: "Actor display metadata is unavailable; actor IDs are retained.",
+      }),
+      optionalTrustRead({
+        read: getTaskService
+          ? async () => (await getTaskService()).listTasks({ projectId: binding.projectId })
+          : undefined,
+        fallback: [] as TaskSummary[],
+        warnings,
+        code: "task_warnings_unavailable",
+        message: "Task assignee warnings could not be checked; an empty list is incomplete.",
+      }),
+    ]);
+    if (rawStatus === null) {
+      if (!warnings.some((warning) => warning.code === "status_unavailable"))
+        warnings.push({
+          code: "status_unavailable",
+          message: "No integration status is available; binding details remain available.",
+        });
+    } else if (rawStatus.lastErrorSummary !== null) {
+      warnings.push({
+        code: "diagnostics_redacted",
+        message: "Raw integration error diagnostics are withheld because they may contain secrets.",
+      });
+    }
+    const status = projectTrustData(() => projectBindingStatus(rawStatus));
+    const taskWarnings = projectTrustData(() => buildTaskMappingWarnings(binding, tasks, actors));
+    for (const warning of taskWarnings)
+      warnings.push({
+        code: "unmapped_assignees",
+        message: "Some task assignees have no outbound actor mapping.",
+        target: { entityType: "task", entityId: warning.taskId },
+        outboundAssigneeWarning: {
+          bindingId,
+          provider: binding.provider,
+          targetRef: binding.targetRef,
+          unmappedActorIds: warning.unmappedActorIds,
+          unmappedAssigneeDisplayNames: warning.unmappedAssigneeDisplayNames,
+        },
+      });
+    const details: IntegrationShowToolDetails = {
+      kind: "integration_show",
+      bindingId,
+      found: true,
+      binding,
+      status,
+      taskWarnings,
+    };
+    return integrationShowResult.success({
+      data: {
         binding,
         status,
+        projectName: projectNameMap.get(binding.projectId) ?? null,
+        actors,
         taskWarnings,
-      };
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: formatIntegrationShowContent(
-              binding,
-              status,
-              projectNameMap,
-              actors,
-              taskWarnings
-            ),
-          },
-        ],
-        details,
-      };
-    } catch (error) {
-      throw new Error(formatToolError(error, "integration_show failed"), { cause: error });
-    }
+      },
+      details,
+      warnings,
+      text: projectTrustData(() =>
+        formatIntegrationShowContent(binding, status, projectNameMap, actors, taskWarnings)
+      ),
+    });
   },
 });
 
@@ -194,6 +293,7 @@ const createIntegrationUpdateToolDefinition = ({
   description: "Update integration binding trust state and actor mappings.",
   promptSnippet: "Update binding-local actor mappings or trust state explicitly.",
   parameters: IntegrationUpdateParams,
+  outputSchema: integrationUpdateResult.outputSchema,
   async execute(
     _toolCallId: string,
     params: {
@@ -205,15 +305,35 @@ const createIntegrationUpdateToolDefinition = ({
       untrustActorIds?: string[];
     }
   ) {
-    const bindingId = normalizeRequiredText(params.bindingId, "bindingId");
-
+    const bindingId = params.bindingId.trim();
+    if (!bindingId) return integrationUpdateResult.failure({ status: "validation_error" });
+    const target = { entityType: "integration" as const, entityId: bindingId };
+    let integrationService: ProjectIntegrationService;
     try {
-      const integrationService = await getProjectIntegrationService();
-      const existing = await integrationService.getIntegrationBinding(bindingId);
-      if (!existing) {
-        throw new Error(`integration binding not found: ${bindingId}`);
-      }
-
+      integrationService = await getProjectIntegrationService();
+    } catch (error) {
+      const status = classifyTrustToolError({ error, tool: "integration_update" });
+      return integrationUpdateResult.failure({
+        status: status === "not_found" ? "backend_error" : status,
+      });
+    }
+    let existing: IntegrationBinding | null;
+    try {
+      existing = await integrationService.getIntegrationBinding(bindingId);
+    } catch (error) {
+      return integrationUpdateResult.failure({
+        status: classifyTrustToolError({ error, tool: "integration_update" }),
+        target,
+      });
+    }
+    if (existing === null)
+      return integrationUpdateResult.failure({
+        status: "not_found",
+        target,
+        text: `Integration binding not found: ${bindingId}`,
+      });
+    let actorMappings: IntegrationBindingActorMapping[];
+    try {
       const actorIdsToValidate = [
         ...(params.actorMappings?.map((mapping) => mapping.actorId) ?? []),
         ...(params.trustActorIds ?? []),
@@ -221,7 +341,7 @@ const createIntegrationUpdateToolDefinition = ({
       ];
       await validateActorIds(getActorService, actorIdsToValidate);
 
-      const actorMappings = applyMappingUpdates(existing.options?.actorMappings ?? [], params);
+      actorMappings = applyMappingUpdates(existing.options?.actorMappings ?? [], params);
       if (
         params.strategy === undefined &&
         params.enabled === undefined &&
@@ -229,12 +349,17 @@ const createIntegrationUpdateToolDefinition = ({
         params.trustActorIds === undefined &&
         params.untrustActorIds === undefined
       ) {
-        throw new Error(
-          "integration_update requires at least one supported field: strategy, enabled, actorMappings, trustActorIds, or untrustActorIds"
-        );
+        throw new TrustToolInputError();
       }
-
-      const updated = await integrationService.updateIntegrationBinding({
+    } catch (error) {
+      const status = classifyTrustToolError({ error, tool: "integration_update" });
+      return integrationUpdateResult.failure({
+        status: status === "not_found" ? "backend_error" : status,
+      });
+    }
+    let updated: IntegrationBinding;
+    try {
+      updated = await integrationService.updateIntegrationBinding({
         bindingId,
         strategy: params.strategy,
         enabled: params.enabled,
@@ -243,20 +368,23 @@ const createIntegrationUpdateToolDefinition = ({
           actorMappings,
         },
       });
-
-      const details: IntegrationUpdateToolDetails = {
-        kind: "integration_update",
-        bindingId,
-        binding: updated,
-      };
-
-      return {
-        content: [{ type: "text" as const, text: formatIntegrationUpdateContent(updated) }],
-        details,
-      };
     } catch (error) {
-      throw new Error(formatToolError(error, "integration_update failed"), { cause: error });
+      return integrationUpdateResult.failure({
+        status: classifyTrustToolError({ error, tool: "integration_update", dispatched: true }),
+        target,
+      });
     }
+    const binding = projectTrustData(() => projectBinding(updated));
+    const details: IntegrationUpdateToolDetails = {
+      kind: "integration_update",
+      bindingId,
+      binding,
+    };
+    return integrationUpdateResult.success({
+      data: { binding },
+      details,
+      text: projectTrustData(() => formatIntegrationUpdateContent(binding)),
+    });
   },
 });
 
@@ -277,6 +405,18 @@ const normalizeIntegrationFilter = (
   enabled: filter.enabled,
 });
 
+const readProjectNames = (
+  getProjectService: (() => Promise<ProjectService>) | undefined,
+  warnings: TrustToolWarning[]
+): Promise<Map<string, string>> =>
+  optionalTrustRead({
+    read: getProjectService ? () => buildProjectNameMap(getProjectService) : undefined,
+    fallback: new Map<string, string>(),
+    warnings,
+    code: "projects_unavailable",
+    message: "Project display metadata is unavailable; project IDs are retained.",
+  });
+
 const buildProjectNameMap = async (
   getProjectService: (() => Promise<ProjectService>) | undefined
 ): Promise<Map<string, string>> => {
@@ -287,35 +427,6 @@ const buildProjectNameMap = async (
   const projectService = await getProjectService();
   const projects = await projectService.listProjects();
   return new Map(projects.map((project) => [project.id, project.name]));
-};
-
-const listActorsBestEffort = async (
-  getActorService: (() => Promise<ActorService>) | undefined
-): Promise<ActorSummary[]> => {
-  if (!getActorService) {
-    return [];
-  }
-
-  try {
-    return await (await getActorService()).listActors();
-  } catch {
-    return [];
-  }
-};
-
-const listProjectTasksBestEffort = async (
-  getTaskService: (() => Promise<TaskService>) | undefined,
-  projectId: string
-): Promise<TaskSummary[]> => {
-  if (!getTaskService) {
-    return [];
-  }
-
-  try {
-    return await (await getTaskService()).listTasks({ projectId });
-  } catch {
-    return [];
-  }
 };
 
 interface IntegrationTaskWarning {
@@ -372,7 +483,7 @@ const applyMappingUpdates = (
   for (const actorId of params.trustActorIds ?? []) {
     const mapping = baseMappings.get(actorId);
     if (!mapping) {
-      throw new Error(`cannot trust unmapped actor: ${actorId}`);
+      throw new TrustToolInputError();
     }
     mapping.trusted = true;
   }
@@ -380,7 +491,7 @@ const applyMappingUpdates = (
   for (const actorId of params.untrustActorIds ?? []) {
     const mapping = baseMappings.get(actorId);
     if (!mapping) {
-      throw new Error(`cannot untrust unmapped actor: ${actorId}`);
+      throw new TrustToolInputError();
     }
     mapping.trusted = false;
   }
@@ -402,7 +513,7 @@ const validateActorIds = async (
   const knownActorIds = new Set(actors.map((actor) => actor.id));
   for (const actorId of actorIds) {
     if (!knownActorIds.has(actorId)) {
-      throw new Error(`actor not found: ${actorId}`);
+      throw new TrustToolInputError();
     }
   }
 };
@@ -442,7 +553,7 @@ const formatIntegrationShowContent = (
     `Strategy: ${binding.strategy}`,
     `Enabled: ${binding.enabled ? "yes" : "no"}`,
     `State: ${status?.state ?? "unknown"}`,
-    `Last error: ${status?.lastErrorSummary ?? "-"}`,
+    `Last error: ${projectBindingStatus(status)?.lastErrorSummary ?? "-"}`,
     "",
     `Actor mappings (${mappings.length}):`,
   ];
@@ -473,26 +584,9 @@ const formatIntegrationShowContent = (
 const formatIntegrationUpdateContent = (binding: IntegrationBinding): string =>
   `Updated integration ${binding.id} • mappings: ${(binding.options?.actorMappings ?? []).length} • strategy: ${binding.strategy} • ${binding.enabled ? "enabled" : "disabled"}`;
 
-const normalizeRequiredText = (value: string, fieldName: string): string => {
-  const trimmedValue = value.trim();
-  if (trimmedValue.length === 0) {
-    throw new Error(`${fieldName} is required`);
-  }
-
-  return trimmedValue;
-};
-
 const normalizeOptionalText = (value: string | undefined): string | undefined => {
   const trimmedValue = value?.trim();
   return trimmedValue && trimmedValue.length > 0 ? trimmedValue : undefined;
-};
-
-const formatToolError = (error: unknown, prefix: string): string => {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return `${prefix}: ${error.message}`;
-  }
-
-  return prefix;
 };
 
 export {

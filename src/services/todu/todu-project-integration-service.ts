@@ -14,11 +14,13 @@ import { createProjectIntegrationService } from "../project-integration-service"
 import type { ProjectService } from "../project-service";
 import type { RepoContextService } from "../repo-context";
 import { ToduDaemonClientError, type ToduDaemonClient } from "./daemon-client";
+import type { ToduDaemonConnectionError } from "./daemon-connection";
 
 export class ToduProjectIntegrationServiceError extends Error {
   readonly operation: string;
   readonly causeCode: string;
   readonly details?: Record<string, unknown>;
+  readonly requestState?: ToduDaemonConnectionError["requestState"];
 
   constructor(options: {
     operation: string;
@@ -26,12 +28,14 @@ export class ToduProjectIntegrationServiceError extends Error {
     message: string;
     details?: Record<string, unknown>;
     cause?: unknown;
+    requestState?: ToduDaemonConnectionError["requestState"];
   }) {
     super(options.message, options.cause ? { cause: options.cause } : undefined);
     this.name = "ToduProjectIntegrationServiceError";
     this.operation = options.operation;
     this.causeCode = options.causeCode;
     this.details = options.details;
+    this.requestState = options.requestState;
   }
 }
 
@@ -109,6 +113,7 @@ const runProjectIntegrationServiceOperation = async <TResult>(
         causeCode: error.code,
         message: `${operation} failed: ${error.message}`,
         details: error.details,
+        requestState: error.requestState,
         cause: error,
       });
     }

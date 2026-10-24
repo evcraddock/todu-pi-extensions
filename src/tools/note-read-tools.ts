@@ -2,11 +2,21 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { stringEnum } from "./string-enum";
+import { NoteListDataSchema, NoteShowDataSchema } from "./trust-tool-schemas";
+import {
+  classifyTrustToolError,
+  createTrustResultBuilder,
+  projectTrustData,
+} from "./trust-tool-results";
+import { projectNote } from "./trust-tool-projections";
 
 import type { NoteEntityType, NoteFilter, NoteSummary } from "../domain/note";
 import type { NoteService } from "../services/note-service";
 import { formatApprovalSummary } from "../utils/approval-format";
 import { getSystemTimezone } from "../utils/timezone";
+
+const noteListResult = createTrustResultBuilder(NoteListDataSchema, "note_list");
+const noteShowResult = createTrustResultBuilder(NoteShowDataSchema, "note_show");
 
 const NOTE_ENTITY_TYPE_VALUES = ["task", "project", "habit"] as const;
 
@@ -82,27 +92,30 @@ const createNoteListToolDefinition = ({ getNoteService }: NoteReadToolDependenci
     "Use journal=true to find standalone journal entries without an attached entity.",
   ],
   parameters: NoteListParams,
+  outputSchema: noteListResult.outputSchema,
   async execute(_toolCallId: string, params: NoteListToolParams) {
-    const filter = normalizeNoteListFilter(params);
-
+    const filter = projectTrustData(() => normalizeNoteListFilter(params));
+    let raw: NoteSummary[];
     try {
-      const noteService = await getNoteService();
-      const notes = await noteService.listNotes(filter);
-      const details: NoteListToolDetails = {
-        kind: "note_list",
-        filter,
-        notes,
-        total: notes.length,
-        empty: notes.length === 0,
-      };
-
-      return {
-        content: [{ type: "text" as const, text: formatNoteListContent(details) }],
-        details,
-      };
+      raw = await (await getNoteService()).listNotes(filter);
     } catch (error) {
-      throw new Error(formatToolError(error, "note_list failed"), { cause: error });
+      const status = classifyTrustToolError({ error, tool: "note_list" });
+      return noteListResult.failure({ status: status === "not_found" ? "backend_error" : status });
     }
+    const notes = projectTrustData(() => raw.map(projectNote));
+    const details: NoteListToolDetails = {
+      kind: "note_list",
+      filter,
+      notes,
+      total: notes.length,
+      empty: notes.length === 0,
+    };
+    return noteListResult.success({
+      data: { filter, notes, total: details.total, empty: details.empty },
+      details,
+      empty: details.empty,
+      text: projectTrustData(() => formatNoteListContent(details)),
+    });
   },
 });
 
@@ -116,37 +129,51 @@ const createNoteShowToolDefinition = ({ getNoteService }: NoteReadToolDependenci
     "If the note is missing, report the explicit not-found result instead of guessing.",
   ],
   parameters: NoteShowParams,
+  outputSchema: noteShowResult.outputSchema,
   async execute(_toolCallId: string, params: NoteShowToolParams) {
+    if (!params.noteId.trim()) return noteShowResult.failure({ status: "validation_error" });
+    const target = { entityType: "note" as const, entityId: params.noteId };
+    let service: NoteService;
     try {
-      const noteService = await getNoteService();
-      const note = await noteService.getNote(params.noteId);
-      if (!note) {
-        const details: NoteShowToolDetails = {
-          kind: "note_show",
-          noteId: params.noteId,
-          found: false,
-        };
-
-        return {
-          content: [{ type: "text" as const, text: `Note not found: ${params.noteId}` }],
-          details,
-        };
-      }
-
+      service = await getNoteService();
+    } catch (error) {
+      const status = classifyTrustToolError({ error, tool: "note_show" });
+      return noteShowResult.failure({ status: status === "not_found" ? "backend_error" : status });
+    }
+    let raw: NoteSummary | null;
+    try {
+      raw = await service.getNote(params.noteId);
+    } catch (error) {
+      return noteShowResult.failure({
+        status: classifyTrustToolError({ error, tool: "note_show" }),
+        target,
+      });
+    }
+    if (raw === null) {
       const details: NoteShowToolDetails = {
         kind: "note_show",
         noteId: params.noteId,
-        found: true,
-        note,
+        found: false,
       };
-
-      return {
-        content: [{ type: "text" as const, text: formatNoteShowContent(note) }],
+      return noteShowResult.failure({
+        status: "not_found",
+        target,
         details,
-      };
-    } catch (error) {
-      throw new Error(formatToolError(error, "note_show failed"), { cause: error });
+        text: `Note not found: ${params.noteId}`,
+      });
     }
+    const note = projectTrustData(() => projectNote(raw));
+    const details: NoteShowToolDetails = {
+      kind: "note_show",
+      noteId: params.noteId,
+      found: true,
+      note,
+    };
+    return noteShowResult.success({
+      data: { note },
+      details,
+      text: projectTrustData(() => formatNoteShowContent(note)),
+    });
   },
 });
 
@@ -212,14 +239,6 @@ const formatNoteShowContent = (note: NoteSummary): string => {
     "Content:",
     note.content.trim().length > 0 ? note.content : "(empty)",
   ].join("\n");
-};
-
-const formatToolError = (error: unknown, prefix: string): string => {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return `${prefix}: ${error.message}`;
-  }
-
-  return prefix;
 };
 
 export type { NoteListToolDetails, NoteShowToolDetails, NoteReadToolDependencies };

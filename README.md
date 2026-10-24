@@ -79,7 +79,9 @@ Task create/update/move preserve confirmed success and entity IDs when optional 
 
 Task list/detail data preserves backend due, scheduled, creation, and update dates. Populated due dates also appear in tool text. See [task date meanings and missing-value behavior](docs/task-dates.md).
 
-`task_list` and `task_show` expose schema-validated structured envelopes to codemode while retaining readable text and compatible UI details. Check `ok` after every call, including fulfilled promises. See [task read outputs and script examples](docs/task-read-outputs.md). Other tool families still return legacy text.
+`task_list` and `task_show` expose schema-validated structured envelopes to codemode while retaining readable text and compatible UI details. Check `ok` after every call, including fulfilled promises. See [task read outputs and script examples](docs/task-read-outputs.md).
+
+Note reads, integration list/show/update, and imported-content approval tools also expose structured envelopes while preserving provenance, trust/mapping state, and warnings. Open-ended integration options and raw diagnostic secrets are withheld from all output surfaces. See [note, integration, and approval outputs](docs/trust-tool-outputs.md). Other tool families still return legacy text.
 
 For contributors, [structured tool result contracts](docs/tool-result-contracts.md) define the shared schemas, metadata safeguards, and result/error conventions.
 

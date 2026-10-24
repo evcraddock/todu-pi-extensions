@@ -106,6 +106,7 @@ export class ToduDaemonClientError extends Error {
   readonly method: string;
   readonly details?: Record<string, unknown>;
   readonly mutationOutcome?: TaskMutationOutcome;
+  readonly requestState?: ToduDaemonConnectionError["requestState"];
 
   constructor(options: {
     code: ToduDaemonClientErrorCode;
@@ -113,6 +114,7 @@ export class ToduDaemonClientError extends Error {
     message: string;
     details?: Record<string, unknown>;
     mutationOutcome?: TaskMutationOutcome;
+    requestState?: ToduDaemonConnectionError["requestState"];
   }) {
     super(options.message);
     this.name = "ToduDaemonClientError";
@@ -120,6 +122,7 @@ export class ToduDaemonClientError extends Error {
     this.method = options.method;
     this.details = options.details;
     this.mutationOutcome = options.mutationOutcome;
+    this.requestState = options.requestState;
   }
 }
 
@@ -1369,6 +1372,7 @@ const mapDaemonErrorToClientError = (
     method,
     message: `${method} failed (${error.code}): ${error.message}`,
     details: error.details,
+    requestState: error.requestState,
   });
 };
 
