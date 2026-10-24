@@ -92,6 +92,14 @@ const createTaskDetailBody = (task: TaskDetail, recentCommentLimit: number): str
     );
   }
 
+  if (task.enrichmentWarnings?.length) {
+    lines.push(
+      "",
+      "Mutation confirmed; do not repeat the write because of missing enrichment.",
+      ...task.enrichmentWarnings.map((warning) => `Warning (${warning.source}): ${warning.message}`)
+    );
+  }
+
   return lines.join("\n");
 };
 

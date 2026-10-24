@@ -56,6 +56,13 @@ export interface TaskSummary {
   assignees: string[];
 }
 
+export type TaskEnrichmentSource = "comments" | "actors" | "project" | "integration-warnings";
+
+export interface TaskEnrichmentWarning {
+  source: TaskEnrichmentSource;
+  message: string;
+}
+
 export interface TaskDetail extends TaskSummary {
   description: string | null;
   descriptionApproval: ImportedContentApproval | null;
@@ -63,6 +70,8 @@ export interface TaskDetail extends TaskSummary {
   outboundAssigneeWarnings: OutboundAssigneeWarning[];
   /** True when outbound warning lookup failed; an empty warning array is then incomplete. */
   outboundAssigneeWarningsUnavailable?: boolean;
+  /** Missing optional metadata after a confirmed mutation; never a reason to retry the write. */
+  enrichmentWarnings?: TaskEnrichmentWarning[];
 }
 
 export type TaskSortField = "priority" | "dueDate" | "createdAt" | "updatedAt" | "title";
