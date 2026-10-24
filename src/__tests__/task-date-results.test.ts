@@ -129,6 +129,9 @@ describe("task date results", () => {
       if (!result.structuredContent.ok) throw new Error("Expected a successful task list");
       expect(result.structuredContent.data.tasks[0]).toMatchObject(expectedDates);
       expect(JSON.parse(JSON.stringify(result.details)).tasks[0]).toMatchObject(expectedDates);
+      expect(result.content[0].text.split(" • ")).toContain(
+        `scheduled: ${expected.scheduledDate ?? "unscheduled"}`
+      );
       if (expected.dueDate !== null) {
         expect(result.content[0].text).toContain(`due: ${expected.dueDate}`);
       } else {
@@ -154,6 +157,9 @@ describe("task date results", () => {
       if (!result.structuredContent.ok) throw new Error("Expected a successful task detail");
       expect(result.structuredContent.data.task).toMatchObject(expectedDates);
       expect(JSON.parse(JSON.stringify(result.details)).task).toMatchObject(expectedDates);
+      expect(result.content[0].text.split("\n")).toContain(
+        `Scheduled: ${expected.scheduledDate ?? "unscheduled"}`
+      );
       if (expected.dueDate !== null) {
         expect(result.content[0].text).toContain(`Due: ${expected.dueDate}`);
       } else {

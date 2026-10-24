@@ -77,7 +77,7 @@ For status-only `task_update` calls, omit assignee parameters or use `null`. `as
 
 Task create/update/move preserve confirmed success and entity IDs when optional metadata reads fail, with explicit enrichment warnings. Unknown dispatch outcomes require checking backend state before retrying; writes are never automatically retried. See [task mutation outcomes](docs/task-mutation-outcomes.md).
 
-Task list/detail data preserves backend due, scheduled, creation, and update dates. Populated due dates also appear in tool text. See [task date meanings and missing-value behavior](docs/task-dates.md).
+Task list/detail data preserves backend due, scheduled, creation, and update dates. Populated due dates also appear in tool text. `task_list` and `task_show` display each task's scheduled date verbatim, or explicitly show `unscheduled` when it is absent. See [task date meanings and missing-value behavior](docs/task-dates.md).
 
 `task_list` and `task_show` expose schema-validated structured envelopes to codemode while retaining readable text and compatible UI details. Check `ok` after every call, including fulfilled promises. See [task read outputs and script examples](docs/task-read-outputs.md).
 

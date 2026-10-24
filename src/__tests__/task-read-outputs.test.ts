@@ -96,7 +96,7 @@ describe("structured task reads", () => {
       expect(result.content[0].text).toBe(
         empty
           ? "No tasks found."
-          : "Tasks (1):\n- task-1 • Task • active • medium • Project • assignees: none • due: 2026-03-08"
+          : "Tasks (1):\n- task-1 • Task • active • medium • Project • assignees: none • due: 2026-03-08 • scheduled: 2026-03-07"
       );
     }
   );
