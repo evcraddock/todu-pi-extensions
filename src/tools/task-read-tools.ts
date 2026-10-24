@@ -328,7 +328,7 @@ const formatTaskSummaryLine = (task: TaskSummary): string => {
   const assigneeLabel =
     task.assigneeDisplayNames.length > 0 ? task.assigneeDisplayNames.join(", ") : "none";
   const dueLabel = task.dueDate ? ` • due: ${task.dueDate}` : "";
-  return `${task.id} • ${task.title} • ${task.status} • ${task.priority} • ${projectLabel} • assignees: ${assigneeLabel}${dueLabel}`;
+  return `${task.id} • ${task.title} • ${task.status} • ${task.priority} • ${projectLabel} • assignees: ${assigneeLabel}${dueLabel} • scheduled: ${task.scheduledDate ?? "unscheduled"}`;
 };
 
 const formatTaskShowContent = (task: TaskDetail): string => {
@@ -338,6 +338,7 @@ const formatTaskShowContent = (task: TaskDetail): string => {
     `Status: ${task.status}`,
     `Priority: ${task.priority}`,
     ...(task.dueDate ? [`Due: ${task.dueDate}`] : []),
+    `Scheduled: ${task.scheduledDate ?? "unscheduled"}`,
     `Project: ${task.projectName ?? task.projectId ?? "No project"}`,
     `Assignees: ${task.assigneeDisplayNames.length > 0 ? task.assigneeDisplayNames.join(", ") : "none"}`,
     `Description approval: ${formatApprovalSummary(task.descriptionApproval) ?? "none"}`,

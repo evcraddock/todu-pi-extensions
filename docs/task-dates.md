@@ -33,7 +33,7 @@ All non-null strings are retained exactly as returned. No `Date` construction, I
 
 The installed backend `validateISODate` validator accepts strings parseable by JavaScript `Date`; it does **not** enforce `YYYY-MM-DD` only. Consequently the extension does not claim every due/scheduled value is date-only or validate/rewrite historical values during reads. Consumers needing a narrower representation must check it and choose an explicit policy rather than silently coercing it.
 
-`task_list` text appends `• due: <original value>` for a populated due date; `task_show` text includes `Due: <original value>`. Tasks without a populated due date retain their previous text layout. Scheduling and creation/update fields remain in data rather than adding more display noise. Existing TUI list/detail rendering is unchanged.
+`task_list` text appends `• due: <original value>` for a populated due date; `task_show` text includes `Due: <original value>`. Missing due dates omit that label. Every listed task also includes `• scheduled: <original value>`, and task details include `Scheduled: <original value>`. If the scheduled date is null or absent, these labels explicitly show `scheduled: unscheduled` / `Scheduled: unscheduled`. Scheduled values retain their exact date-only or timestamp representation without adding a time or converting timezones. Creation/update fields remain in data. Existing TUI list/detail rendering is unchanged.
 
 ## Sorting merged results
 
@@ -60,4 +60,4 @@ Codemode receives the structured envelope directly from `task_list` and `task_sh
 
 ## Verification
 
-`src/__tests__/task-date-results.test.ts` covers populated, absent, undefined, and null optional dates; independent due/scheduled values; exact date-only and offset timestamp preservation; service enrichment and tool details/structured outputs; search results; unchanged TUI models; and caller-side merging/deduplication/sorting with nulls last. All RPC responses in these unit tests are mocked; they do not connect to or modify normal Todu data.
+`src/__tests__/task-date-results.test.ts` covers populated, absent, undefined, and null optional dates; independent due/scheduled values; exact date-only and offset timestamp preservation; service enrichment and tool details/structured outputs; scheduled-date text and explicit unscheduled labels in both read tools; search results; unchanged TUI models; and caller-side merging/deduplication/sorting with nulls last. All RPC responses in these unit tests are mocked; they do not connect to or modify normal Todu data.
