@@ -19,6 +19,8 @@ export interface CreateTaskInput {
 
 export interface UpdateTaskInput {
   taskId: TaskId;
+  /** Normalized YYYY-MM-DD calendar date. Omit to preserve the existing due date. */
+  dueDate?: string;
   /** Omit to preserve the schedule; null explicitly removes it. */
   scheduledDate?: string | null;
   title?: string;

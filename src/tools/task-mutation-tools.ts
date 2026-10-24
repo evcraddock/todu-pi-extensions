@@ -26,6 +26,7 @@ import type {
 } from "../services/task-service";
 import type { ProjectService } from "../services/project-service";
 import { ToduTaskServiceError } from "../services/todu/todu-task-service";
+import { normalizeTaskDueDate } from "../utils/task-due-date";
 import {
   normalizeTaskScheduledDate,
   normalizeTaskScheduledDateUpdate,
@@ -53,6 +54,12 @@ const TaskCreateParams = Type.Object({
 
 const TaskUpdateParams = Type.Object({
   taskId: Type.String({ description: "Task ID" }),
+  dueDate: Type.Optional(
+    Type.String({
+      description:
+        "Set or change the due date: YYYY-MM-DD or an explicit English month date with a four-digit year (November 1, 2026 or 1 Nov 2026). Normalized to YYYY-MM-DD. Ambiguous/relative dates and timestamps are rejected. Omit to leave unchanged; clearing is not supported.",
+    })
+  ),
   scheduledDate: Type.Optional(
     Type.Union([Type.String(), Type.Null()], {
       description:
@@ -125,6 +132,7 @@ interface TaskCreateToolParams {
 
 interface TaskUpdateToolParams {
   taskId: TaskId;
+  dueDate?: string;
   scheduledDate?: string | null;
   title?: string;
   status?: TaskStatus;
@@ -237,11 +245,12 @@ const createTaskUpdateToolDefinition = ({
     name: "task_update",
     label: "Task Update",
     description:
-      "Update a task's title, status, priority, description, labels, assignees, or scheduled date.",
+      "Update a task's title, status, priority, description, labels, assignees, due date, or scheduled date.",
     promptSnippet: "Update a task's supported metadata, label, and assignee fields by task ID.",
     promptGuidelines: [
       "Use this tool for backend task updates in normal chat.",
-      "Supported fields are title, status, priority, description, labels, scheduledDate, and actor-based assignee updates.",
+      "Supported fields are title, status, priority, description, labels, dueDate, scheduledDate, and actor-based assignee updates.",
+      "Use dueDate to set or change a deadline as YYYY-MM-DD or an explicit English month date with a four-digit year (November 1, 2026 or 1 Nov 2026). Omit to preserve it. Clearing, timestamps, and ambiguous or relative dates are not supported; ask for clarification rather than guessing a date.",
       "Use scheduledDate to set or change the planned date (YYYY-MM-DD) or ISO timestamp. Use null or an empty string to remove the scheduled date. Omit it to preserve the current schedule.",
       "Use labels to add labels to the existing task labels.",
       "Use removeLabels when labels should be removed from the existing task labels.",
@@ -496,6 +505,10 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     priority: params.priority,
   };
 
+  if (params.dueDate !== undefined) {
+    input.dueDate = normalizeTaskDueDate(params.dueDate);
+  }
+
   if (params.scheduledDate !== undefined) {
     input.scheduledDate = normalizeTaskScheduledDateUpdate(params.scheduledDate);
   }
@@ -520,13 +533,14 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
     input.title === undefined &&
     input.status === undefined &&
     input.priority === undefined &&
+    input.dueDate === undefined &&
     input.scheduledDate === undefined &&
     !hasOwn(input, "description") &&
     !hasOwn(input, "labels") &&
     !hasOwn(input, "assigneeActorIds")
   ) {
     throw new Error(
-      "task_update requires at least one supported field: title, status, priority, description, labels, assigneeActorIds, or scheduledDate"
+      "task_update requires at least one supported field: title, status, priority, description, labels, assigneeActorIds, dueDate, or scheduledDate"
     );
   }
 
@@ -581,6 +595,10 @@ const resolveUpdateTaskInput = async (
     status: params.status,
     priority: params.priority,
   };
+
+  if (params.dueDate !== undefined) {
+    baseInput.dueDate = normalizeTaskDueDate(params.dueDate);
+  }
 
   if (params.scheduledDate !== undefined) {
     baseInput.scheduledDate = normalizeTaskScheduledDateUpdate(params.scheduledDate);
@@ -757,6 +775,7 @@ const formatTaskUpdateContent = (task: TaskDetail, input: UpdateTaskInput): stri
     input.title !== undefined ? `title=${JSON.stringify(input.title)}` : null,
     input.status !== undefined ? `status=${input.status}` : null,
     input.priority !== undefined ? `priority=${input.priority}` : null,
+    input.dueDate !== undefined ? `dueDate=${input.dueDate}` : null,
     input.scheduledDate !== undefined
       ? `scheduledDate=${input.scheduledDate === null ? "cleared" : input.scheduledDate}`
       : null,

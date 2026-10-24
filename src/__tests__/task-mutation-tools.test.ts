@@ -110,7 +110,7 @@ describe("normalizeCreateTaskInput", () => {
 describe("normalizeUpdateTaskInput", () => {
   it("requires at least one supported mutation field", () => {
     expect(() => normalizeUpdateTaskInput({ taskId: "task-123" })).toThrow(
-      "task_update requires at least one supported field: title, status, priority, description, labels, assigneeActorIds, or scheduledDate"
+      "task_update requires at least one supported field: title, status, priority, description, labels, assigneeActorIds, dueDate, or scheduledDate"
     );
   });
 
@@ -763,7 +763,7 @@ describe("createTaskUpdateToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", { taskId: "task-123" })).rejects.toThrow(
-      "task_update failed: task_update requires at least one supported field: title, status, priority, description, labels, assigneeActorIds, or scheduledDate"
+      "task_update failed: task_update requires at least one supported field: title, status, priority, description, labels, assigneeActorIds, dueDate, or scheduledDate"
     );
   });
 
