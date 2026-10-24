@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { stringEnum } from "./string-enum";
+import { createTaskUpdateQueue, throwIfTaskUpdateAborted } from "./task-update-queue";
 
 import type {
   ProjectSummary,
@@ -230,49 +231,63 @@ const createTaskUpdateToolDefinition = ({
   getTaskService,
   getActorService,
   getProjectService,
-}: TaskMutationToolDependencies) => ({
-  name: "task_update",
-  label: "Task Update",
-  description:
-    "Update a task's title, status, priority, description, labels, assignees, or scheduled date.",
-  promptSnippet: "Update a task's supported metadata, label, and assignee fields by task ID.",
-  promptGuidelines: [
-    "Use this tool for backend task updates in normal chat.",
-    "Supported fields are title, status, priority, description, labels, scheduledDate, and actor-based assignee updates.",
-    "Use scheduledDate to set or change the planned date (YYYY-MM-DD) or ISO timestamp. Use null or an empty string to remove the scheduled date. Omit it to preserve the current schedule.",
-    "Use labels to add labels to the existing task labels.",
-    "Use removeLabels when labels should be removed from the existing task labels.",
-    "Use assigneeActorIds to replace the full assignee list. An empty list explicitly clears all assignees.",
-    "For status-only or other non-assignment updates, omit assigneeActorIds or use null; never use [] as a placeholder.",
-    "Use addAssigneeActorIds or removeAssigneeActorIds for incremental multi-actor assignment changes. Omitted, null, or empty incremental lists are no-ops.",
-    "Do not combine an explicit assigneeActorIds replacement with non-empty addAssigneeActorIds or removeAssigneeActorIds.",
-  ],
-  parameters: TaskUpdateParams,
-  async execute(_toolCallId: string, params: TaskUpdateToolParams) {
-    try {
-      const taskService = await getTaskService();
-      const actorService = await getActorService?.();
-      const projectService = await getProjectService?.();
-      const input = await resolveUpdateTaskInput(taskService, params, {
-        actorService,
-        projectService,
-      });
-      const task = await updateTask({ taskService }, input);
-      const details: TaskUpdateToolDetails = {
-        kind: "task_update",
-        input,
-        task,
-      };
-
-      return {
-        content: [{ type: "text" as const, text: formatTaskUpdateContent(task, input) }],
-        details,
-      };
-    } catch (error) {
-      throw new Error(formatToolError(error, "task_update failed"), { cause: error });
-    }
-  },
-});
+}: TaskMutationToolDependencies) => {
+  const updateQueue = createTaskUpdateQueue();
+  return {
+    name: "task_update",
+    label: "Task Update",
+    description:
+      "Update a task's title, status, priority, description, labels, assignees, or scheduled date.",
+    promptSnippet: "Update a task's supported metadata, label, and assignee fields by task ID.",
+    promptGuidelines: [
+      "Use this tool for backend task updates in normal chat.",
+      "Supported fields are title, status, priority, description, labels, scheduledDate, and actor-based assignee updates.",
+      "Use scheduledDate to set or change the planned date (YYYY-MM-DD) or ISO timestamp. Use null or an empty string to remove the scheduled date. Omit it to preserve the current schedule.",
+      "Use labels to add labels to the existing task labels.",
+      "Use removeLabels when labels should be removed from the existing task labels.",
+      "Use assigneeActorIds to replace the full assignee list. An empty list explicitly clears all assignees.",
+      "For status-only or other non-assignment updates, omit assigneeActorIds or use null; never use [] as a placeholder.",
+      "Use addAssigneeActorIds or removeAssigneeActorIds for incremental multi-actor assignment changes. Omitted, null, or empty incremental lists are no-ops.",
+      "Do not combine an explicit assigneeActorIds replacement with non-empty addAssigneeActorIds or removeAssigneeActorIds.",
+    ],
+    parameters: TaskUpdateParams,
+    async execute(_toolCallId: string, params: TaskUpdateToolParams, signal?: AbortSignal) {
+      try {
+        const taskId = normalizeRequiredText(params.taskId, "taskId");
+        return await updateQueue.run({
+          taskId,
+          signal,
+          action: async () => {
+            const taskService = await getTaskService();
+            throwIfTaskUpdateAborted(signal);
+            const actorService = await getActorService?.();
+            throwIfTaskUpdateAborted(signal);
+            const projectService = await getProjectService?.();
+            throwIfTaskUpdateAborted(signal);
+            const input = await resolveUpdateTaskInput(taskService, params, {
+              actorService,
+              projectService,
+              signal,
+            });
+            throwIfTaskUpdateAborted(signal);
+            const task = await updateTask({ taskService }, input);
+            const details: TaskUpdateToolDetails = {
+              kind: "task_update",
+              input,
+              task,
+            };
+            return {
+              content: [{ type: "text" as const, text: formatTaskUpdateContent(task, input) }],
+              details,
+            };
+          },
+        });
+      } catch (error) {
+        throw new Error(formatToolError(error, "task_update failed"), { cause: error });
+      }
+    },
+  };
+};
 
 const createTaskCommentCreateToolDefinition = ({
   getTaskService,
@@ -521,6 +536,7 @@ const normalizeUpdateTaskInput = (params: TaskUpdateToolParams): UpdateTaskInput
 interface ResolveUpdateTaskInputDependencies {
   actorService?: ActorService;
   projectService?: ProjectService;
+  signal?: AbortSignal;
 }
 
 const resolveUpdateTaskInput = async (
@@ -528,6 +544,7 @@ const resolveUpdateTaskInput = async (
   params: TaskUpdateToolParams,
   dependencies: ResolveUpdateTaskInputDependencies = {}
 ): Promise<UpdateTaskInput> => {
+  throwIfTaskUpdateAborted(dependencies.signal);
   const addAssigneeActorIds =
     params.addAssigneeActorIds == null
       ? undefined
@@ -583,6 +600,7 @@ const resolveUpdateTaskInput = async (
   }
 
   const task = await taskService.getTask(baseInput.taskId);
+  throwIfTaskUpdateAborted(dependencies.signal);
   if (!task) {
     throw new Error(`task not found: ${baseInput.taskId}`);
   }
@@ -619,6 +637,7 @@ const validateNextAssigneeActorIds = async (
   input: UpdateTaskInput,
   dependencies: ResolveUpdateTaskInputDependencies
 ): Promise<UpdateTaskInput> => {
+  throwIfTaskUpdateAborted(dependencies.signal);
   if (input.assigneeActorIds === undefined) {
     return input;
   }
@@ -628,6 +647,7 @@ const validateNextAssigneeActorIds = async (
   }
 
   const task = await taskService.getTask(input.taskId);
+  throwIfTaskUpdateAborted(dependencies.signal);
   if (!task) {
     throw new Error(`task not found: ${input.taskId}`);
   }
@@ -635,12 +655,14 @@ const validateNextAssigneeActorIds = async (
   const project = task.projectId
     ? await dependencies.projectService.getProject(task.projectId)
     : null;
+  throwIfTaskUpdateAborted(dependencies.signal);
   if (!project) {
     return input;
   }
 
   const currentAssignees = new Set(task.assigneeActorIds);
   const actors = await dependencies.actorService.listActors();
+  throwIfTaskUpdateAborted(dependencies.signal);
   const actorMap = new Map(actors.map((actor) => [actor.id, actor]));
   const authorizedActorIds = new Set(project.authorizedAssigneeActorIds);
 

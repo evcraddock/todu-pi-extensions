@@ -73,6 +73,8 @@ For status-only `task_update` calls, omit assignee parameters or use `null`. `as
 
 `task_create` and `task_update` accept an optional `scheduledDate` (for example, `2026-11-01`). Omit it to create an unscheduled task or leave an existing schedule unchanged. To remove an existing schedule, call `task_update` with `scheduledDate: null` (an empty string also clears it). `/task-new` also prompts for an optional scheduled date; blank skips scheduling and Escape cancels creation.
 
+`task_update` serializes the full read/validate/modify/write flow per task ID while allowing different tasks to progress concurrently. Cancellation never releases a dispatched write early. This is extension-local protection, not a cross-client lock; see [concurrent task updates and backend limitations](docs/task-update-concurrency.md).
+
 Task create/update/move preserve confirmed success and entity IDs when optional metadata reads fail, with explicit enrichment warnings. Unknown dispatch outcomes require checking backend state before retrying; writes are never automatically retried. See [task mutation outcomes](docs/task-mutation-outcomes.md).
 
 Task list/detail data preserves backend due, scheduled, creation, and update dates. Populated due dates also appear in tool text. See [task date meanings and missing-value behavior](docs/task-dates.md).
