@@ -1,6 +1,6 @@
 # Structured task reads
 
-`task_list` and `task_show` declare `outputSchema` and return validated `structuredContent` using the [version 1 shared envelope](tool-result-contracts.md). Pi 1.1.0+ codemode resolves these calls to the envelope, not readable text or the outer tool result. Other Todu tool families have not migrated; do not assume they return envelopes.
+`task_list` and `task_show` declare `outputSchema` and return validated `structuredContent` using the [version 1 shared envelope](tool-result-contracts.md). Pi 1.1.0+ codemode resolves these calls to the envelope, not readable text or the outer tool result. [Note, integration, and approval tools](trust-tool-outputs.md) also return envelopes. Remaining Todu tool families have not migrated; inspect each tool's declaration instead of assuming it returns an envelope.
 
 ## Payloads
 

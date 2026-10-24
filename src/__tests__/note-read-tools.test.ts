@@ -181,7 +181,7 @@ describe("createNoteListToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", {})).rejects.toThrow(
-      "note_list failed: daemon unavailable"
+      "note_list failed: Unexpected operation failure."
     );
   });
 });
@@ -255,7 +255,7 @@ describe("createNoteShowToolDefinition", () => {
     });
 
     await expect(tool.execute("tool-call-1", { noteId: "note-1" })).rejects.toThrow(
-      "note_show failed: daemon unavailable"
+      "note_show failed: Unexpected operation failure."
     );
   });
 });
