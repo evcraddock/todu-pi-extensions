@@ -71,7 +71,6 @@ When installing packages:
 ## Task Lifecycle
 
 - Starting: always run `task-start-preflight`
-- Closing: run `task-close-gate`
 
 ## PR Workflow
 
